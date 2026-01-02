@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Home, 
+   Home, 
   CheckSquare, 
   Activity, 
   CreditCard, 
@@ -575,6 +575,8 @@ const CaptureModal = ({ onClose, onSave }: { onClose: () => void, onSave: (title
   );
 };
 
+
+
 // --- Main App ---
 
 export default function App() {
@@ -588,6 +590,9 @@ export default function App() {
   const [showFinanceCapture, setShowFinanceCapture] = useState(false);
   const [financeInitialGoalId, setFinanceInitialGoalId] = useState<string | null>(null);
 
+
+
+  
   const activePage = activePageId ? pages.find(p => p.id === activePageId) : null;
 
   const handleQuickNote = (title: string, body: string, category: string) => {
