@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
@@ -71,3 +72,7 @@ export default defineConfig([
   },
 ])
 ```
+=======
+# Rhytmn---Minimalist-Mobile-Life-Tracker-
+Rhythm is a unified "Life OS" designed to replace fragmented tools with a single, elegant interface. Instead of rigid "habit tracking," Rhythm focuses on the natural cadence of your life managing your finances, capturing your ideas, and maintaining your daily momentum.
+>>>>>>> e97d050456193e290566ba9fc830f0643d0eba1d
