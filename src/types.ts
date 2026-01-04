@@ -2,11 +2,18 @@ import type { ReactNode } from 'react';
 
 export type TimeScale = 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
 
-export interface Block {
-  id: string;
-  type: 'text' | 'heading' | 'todo' | 'habit_widget' | 'finance_widget';
-  content: any;
-}
+export type TodoContent = {
+  text: string;
+  completed?: boolean;
+  done?: boolean;
+};
+
+export type Block =
+  | { id: string; type: 'text'; content: string }
+  | { id: string; type: 'heading'; content: string }
+  | { id: string; type: 'todo'; content: TodoContent }
+  | { id: string; type: 'habit_widget'; content: Record<string, unknown> }
+  | { id: string; type: 'finance_widget'; content: Record<string, unknown> };
 
 export interface Page {
   id: string;

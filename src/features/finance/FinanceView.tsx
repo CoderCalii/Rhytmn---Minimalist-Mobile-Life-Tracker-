@@ -1,14 +1,50 @@
-import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Plus, Wallet } from 'lucide-react';
-import { INITIAL_ACCOUNTS, INITIAL_GOALS, INITIAL_TRANSACTIONS } from '../../mockData';
+import { useEffect, useMemo, useState } from 'react';
+import { Car, ChevronDown, ChevronUp, Plus, TrendingUp, Tv, Utensils, Wallet, Zap } from 'lucide-react';
+import { INITIAL_ACCOUNTS, INITIAL_GOALS } from '../../mockData';
 import type { FinanceAccount, FinanceGoal, FinanceTransaction } from '../../types';
+import BrandLogo from '../../components/BrandLogo';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 interface FinanceViewProps {
   accounts: FinanceAccount[];
   goals: FinanceGoal[];
-  transactions: FinanceTransaction[];
   onAddGoal: () => void;
+  refreshToken?: number;
 }
+
+interface FinanceEntryRow {
+  id: string;
+  amount: number | string;
+  category?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+}
+
+const formatEntryDate = (value?: string | null) => {
+  if (!value) return 'Unknown';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Unknown';
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfEntry = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const diffDays = Math.round((startOfToday.getTime() - startOfEntry.getTime()) / 86400000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const getTransactionIcon = (category: string, type: FinanceTransaction['type']) => {
+  if (type === 'income') return <TrendingUp size={16} />;
+  const normalized = category.toLowerCase();
+  if (normalized.includes('food') || normalized.includes('drink')) return <Utensils size={16} />;
+  if (normalized.includes('transport') || normalized.includes('uber')) return <Car size={16} />;
+  if (normalized.includes('entertainment') || normalized.includes('movie') || normalized.includes('tv')) return <Tv size={16} />;
+  if (normalized.includes('tech') || normalized.includes('software')) return <Zap size={16} />;
+  return <Wallet size={16} />;
+};
 
 const FinanceHeader = () => {
   const today = new Date().toLocaleDateString('en-US', { 
@@ -19,8 +55,13 @@ const FinanceHeader = () => {
 
   return (
     <div className="px-6 pt-12 pb-6 sticky top-0 bg-white/80 backdrop-blur-md z-[60]">
-      <h1 className="text-4xl font-black tracking-tight text-black">Portfolio</h1>
-      <p className="text-slate-400 text-sm font-bold mt-1 uppercase tracking-widest">{today}</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-4xl font-black tracking-tight text-black">Portfolio</h1>
+          <p className="text-slate-400 text-sm font-bold mt-1 uppercase tracking-widest">{today}</p>
+        </div>
+        <BrandLogo className="h-9 w-9" />
+      </div>
     </div>
   );
 };
@@ -28,17 +69,74 @@ const FinanceHeader = () => {
 const FinanceView = ({
   accounts = INITIAL_ACCOUNTS,
   goals = INITIAL_GOALS,
-  transactions = INITIAL_TRANSACTIONS,
-  onAddGoal
+  onAddGoal,
+  refreshToken = 0
 }: FinanceViewProps) => {
   const [activeAccountIndex, setActiveAccountIndex] = useState(0);
   const [showAllGoals, setShowAllGoals] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+
+    supabase
+      .from('finance_entries')
+      .select('id, amount, category, note, created_at')
+      .order('created_at', { ascending: false })
+      .then(({ data, error: fetchError }) => {
+        if (!isMounted) return;
+        if (fetchError) {
+          setError('Failed to load entries.');
+          setTransactions([]);
+          setLoading(false);
+          return;
+        }
+
+        const entries = (data ?? []) as FinanceEntryRow[];
+        const mapped = entries.map((entry) => {
+          const rawAmount = Number(entry.amount);
+          const amountValue = Number.isFinite(rawAmount) ? rawAmount : 0;
+          const type: FinanceTransaction['type'] = amountValue >= 0 ? 'income' : 'expense';
+          const category = entry.category?.trim() || 'General';
+          const title = entry.note?.trim() || category;
+
+          return {
+            id: entry.id,
+            title,
+            category,
+            amount: Math.abs(amountValue),
+            type,
+            date: formatEntryDate(entry.created_at),
+            icon: getTransactionIcon(category, type)
+          };
+        });
+
+        setTransactions(mapped);
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, refreshToken]);
 
   const displayedGoals = useMemo(() => {
     return showAllGoals ? goals : goals.slice(0, 2);
   }, [goals, showAllGoals]);
 
   const cycleAccount = () => {
+    if (accounts.length === 0) return;
     setActiveAccountIndex((prev) => (prev + 1) % accounts.length);
   };
 
@@ -145,39 +243,49 @@ const FinanceView = ({
             <button className="text-[11px] font-black text-slate-300 uppercase tracking-widest">History</button>
           </div>
 
-          <div className="space-y-10">
-            {Object.entries(groupedTransactions).map(([date, items]) => (
-              <div key={date}>
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] mb-6">
-                  {date}
-                </p>
-                <div className="space-y-4">
-                  {items.map((transaction) => (
-                    <div 
-                      key={transaction.id} 
-                      className="group flex items-center justify-between transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-5">
-                        <div className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all ${transaction.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500 group-hover:bg-slate-100'}`}>
-                          {transaction.icon}
+          {authLoading || loading ? (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-400">Loading entries...</div>
+          ) : !user ? (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-400">Sign in to view your activity.</div>
+          ) : error ? (
+            <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-500">{error}</div>
+          ) : transactions.length === 0 ? (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-400">No activity yet.</div>
+          ) : (
+            <div className="space-y-10">
+              {Object.entries(groupedTransactions).map(([date, items]) => (
+                <div key={date}>
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] mb-6">
+                    {date}
+                  </p>
+                  <div className="space-y-4">
+                    {items.map((transaction) => (
+                      <div 
+                        key={transaction.id} 
+                        className="group flex items-center justify-between transition-all cursor-pointer"
+                      >
+                        <div className="flex items-center gap-5">
+                          <div className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all ${transaction.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-500 group-hover:bg-slate-100'}`}>
+                            {transaction.icon}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900 tracking-tight">{transaction.title}</h4>
+                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-tighter">{transaction.category}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-bold text-sm text-slate-900 tracking-tight">{transaction.title}</h4>
-                          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-tighter">{transaction.category}</p>
+                        <div className="text-right">
+                          <p className={`font-black text-sm ${transaction.type === 'income' ? 'text-emerald-500' : 'text-slate-900'}`}>
+                            {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter mt-0.5">12:30 PM</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-black text-sm ${transaction.type === 'income' ? 'text-emerald-500' : 'text-slate-900'}`}>
-                          {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
-                        </p>
-                        <p className="text-[10px] text-slate-300 font-bold uppercase tracking-tighter mt-0.5">12:30 PM</p>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

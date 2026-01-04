@@ -1,5 +1,7 @@
 import { Flame, Plus, Sparkles, Sun, Zap } from 'lucide-react';
 import AppHeader from '../../components/AppHeader';
+import BrandLogo from '../../components/BrandLogo';
+import AuthControl from './components/AuthControl';
 import { INITIAL_PAGES } from '../../mockData';
 import type { Page } from '../../types';
 
@@ -24,7 +26,15 @@ const HomeView = ({ pages = INITIAL_PAGES, zapInput, onZapInputChange, onZapSubm
       <AppHeader
         title="Home"
         subtitle="Tuesday, Oct 24"
-        rightAction={<div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center"><Sun size={18} /></div>}
+        rightAction={(
+          <div className="flex items-center gap-3">
+            <BrandLogo className="h-8 w-8" />
+            <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center">
+              <Sun size={18} />
+            </div>
+            <AuthControl />
+          </div>
+        )}
       />
 
       <div className="px-6 mt-2 space-y-8">

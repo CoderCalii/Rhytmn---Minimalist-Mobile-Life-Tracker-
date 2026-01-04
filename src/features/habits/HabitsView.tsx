@@ -1,15 +1,67 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Flame } from 'lucide-react';
 import AppHeader from '../../components/AppHeader';
-import { INITIAL_HABITS } from '../../mockData';
+import BrandLogo from '../../components/BrandLogo';
 import type { Habit, TimeScale } from '../../types';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
-interface HabitsViewProps {
-  habits: Habit[];
+interface HabitRow {
+  id: string;
+  title: string;
+  frequency?: string | null;
 }
 
-const HabitsView = ({ habits = INITIAL_HABITS }: HabitsViewProps) => {
+interface HabitsViewProps {
+  refreshToken?: number;
+}
+
+const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
   const [scale, setScale] = useState<TimeScale>('Weekly');
+  const { user, loading: authLoading } = useAuth();
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setHabits([]);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+
+    supabase
+      .from('habits')
+      .select('id, title, frequency')
+      .order('created_at', { ascending: false })
+      .then(({ data, error: fetchError }) => {
+        if (!isMounted) return;
+        if (fetchError) {
+          setError('Failed to load habits.');
+          setHabits([]);
+        } else {
+          const rows = (data ?? []) as HabitRow[];
+          setHabits(rows.map((row) => ({
+            id: row.id,
+            name: row.title,
+            meta: row.frequency ?? 'Daily',
+            color: 'bg-black',
+            data: [0, 0, 0, 0, 0, 0, 0],
+            monthly: 0,
+            yearly: 0
+          })));
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, refreshToken]);
 
   const renderScaleContent = () => {
     switch (scale) {
@@ -120,7 +172,11 @@ const HabitsView = ({ habits = INITIAL_HABITS }: HabitsViewProps) => {
 
   return (
     <div className="flex-1 overflow-y-auto pb-40">
-      <AppHeader title="Rhythm" subtitle="Consistency > Intensity" />
+      <AppHeader
+        title="Rhythm"
+        subtitle="Consistency > Intensity"
+        rightAction={<BrandLogo className="h-8 w-8" />}
+      />
       
       <div className="px-6 mb-8 mt-2 sticky top-24 bg-white/95 backdrop-blur-sm pb-4 z-10">
         <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-100">
@@ -137,7 +193,17 @@ const HabitsView = ({ habits = INITIAL_HABITS }: HabitsViewProps) => {
       </div>
 
       <div className="px-6">
-        {renderScaleContent()}
+        {authLoading || loading ? (
+          <div className="p-4 bg-gray-50 rounded-2xl text-sm text-gray-400">Loading habits...</div>
+        ) : !user ? (
+          <div className="p-4 bg-gray-50 rounded-2xl text-sm text-gray-400">Sign in to view your habits.</div>
+        ) : error ? (
+          <div className="p-4 bg-rose-50 rounded-2xl text-sm text-rose-500">{error}</div>
+        ) : habits.length === 0 ? (
+          <div className="p-4 bg-gray-50 rounded-2xl text-sm text-gray-400">No habits yet.</div>
+        ) : (
+          renderScaleContent()
+        )}
       </div>
     </div>
   );

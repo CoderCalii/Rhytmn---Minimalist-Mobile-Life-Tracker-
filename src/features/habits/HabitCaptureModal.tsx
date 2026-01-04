@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { ArrowRight, Clock, X } from 'lucide-react';
-import type { Habit } from '../../types';
+import { sanitizeText } from '../../utils/sanitize';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 interface HabitCaptureModalProps {
   onClose: () => void;
-  onSave: (habit: Partial<Habit>) => void;
+  onSaved?: () => void;
 }
 
-const HabitCaptureModal = ({ onClose, onSave }: HabitCaptureModalProps) => {
+const HabitCaptureModal = ({ onClose, onSaved }: HabitCaptureModalProps) => {
+  const { user } = useAuth();
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('Daily');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="absolute inset-0 bg-white z-[150] flex flex-col">
@@ -27,7 +32,7 @@ const HabitCaptureModal = ({ onClose, onSave }: HabitCaptureModalProps) => {
           placeholder="Exercise, Meditation, etc."
           className="w-full text-4xl font-bold outline-none border-b-2 border-gray-100 pb-4 placeholder:text-gray-100"
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => setName(sanitizeText(event.target.value))}
         />
 
         <div className="mt-12 space-y-6">
@@ -53,12 +58,38 @@ const HabitCaptureModal = ({ onClose, onSave }: HabitCaptureModalProps) => {
 
       <div className="p-8">
         <button 
-          onClick={() => { onSave({ name, meta: goal }); onClose(); }}
-          disabled={!name}
+          onClick={async () => {
+            if (!user) {
+              setError('Sign in to create a habit.');
+              return;
+            }
+            const safeName = sanitizeText(name).trim();
+            if (!safeName) return;
+            const safeGoal = sanitizeText(goal).trim();
+
+            setIsSaving(true);
+            setError(null);
+
+            const { error: insertError } = await supabase
+              .from('habits')
+              .insert({ user_id: user.id, title: safeName, frequency: safeGoal });
+
+            if (insertError) {
+              setIsSaving(false);
+              setError('Failed to save habit.');
+              return;
+            }
+
+            setIsSaving(false);
+            onSaved?.();
+            onClose();
+          }}
+          disabled={!name || isSaving || !user}
           className="w-full bg-black text-white py-5 rounded-[24px] font-bold text-lg flex items-center justify-center gap-3 active:scale-95 transition-all shadow-xl disabled:opacity-20"
         >
-          Create Habit <ArrowRight size={20} />
+          {isSaving ? 'Saving...' : 'Create Habit'} <ArrowRight size={20} />
         </button>
+        {error && <p className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</p>}
       </div>
     </div>
   );

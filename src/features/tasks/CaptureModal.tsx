@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FileText, Tag, X } from 'lucide-react';
+import { sanitizeText } from '../../utils/sanitize';
 
 interface CaptureModalProps {
   onClose: () => void;
@@ -19,7 +20,13 @@ const CaptureModal = ({ onClose, onSave }: CaptureModalProps) => {
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={20} /></button>
         <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Quick Note</span>
         <button 
-          onClick={() => { onSave(title || 'Untitled Note', body, category); onClose(); }} 
+          onClick={() => {
+            const safeTitle = sanitizeText(title).trim() || 'Untitled Note';
+            const safeBody = sanitizeText(body).trim();
+            const safeCategory = sanitizeText(category).trim();
+            onSave(safeTitle, safeBody, safeCategory);
+            onClose();
+          }} 
           disabled={!body}
           className="text-xs font-bold text-black disabled:opacity-20 uppercase tracking-widest px-4 py-2"
         >
@@ -33,7 +40,7 @@ const CaptureModal = ({ onClose, onSave }: CaptureModalProps) => {
           placeholder="Title" 
           className="w-full text-3xl font-bold border-none outline-none mb-4 placeholder:text-gray-200" 
           value={title} 
-          onChange={(event) => setTitle(event.target.value)} 
+          onChange={(event) => setTitle(sanitizeText(event.target.value))} 
         />
         
         <div className="flex items-center gap-2 mb-8 overflow-x-auto no-scrollbar py-1">
@@ -55,7 +62,7 @@ const CaptureModal = ({ onClose, onSave }: CaptureModalProps) => {
           placeholder="Start writing..." 
           className="w-full h-full text-lg font-medium border-none outline-none resize-none bg-transparent leading-relaxed" 
           value={body} 
-          onChange={(event) => setBody(event.target.value)} 
+          onChange={(event) => setBody(sanitizeText(event.target.value))} 
         />
       </div>
 

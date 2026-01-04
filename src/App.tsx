@@ -14,9 +14,10 @@ import HabitsView from './features/habits/HabitsView';
 import HomeView from './features/home/HomeView';
 import PageDetailView from './features/page_detail/PageDetailView';
 import TasksView from './features/tasks/TasksView';
-import { INITIAL_ACCOUNTS, INITIAL_GOALS, INITIAL_HABITS, INITIAL_PAGES, INITIAL_TRANSACTIONS } from './mockData';
-import type { Block, FinanceGoal, Habit, Page } from './types';
+import { INITIAL_ACCOUNTS, INITIAL_GOALS, INITIAL_PAGES } from './mockData';
+import type { Block, FinanceGoal, Page } from './types';
 import { getTodoCompleted } from './utils/todo';
+import { sanitizeText } from './utils/sanitize';
 
 // --- Types ---
 
@@ -28,17 +29,18 @@ export default function App() {
   const [view, setView] = useState<ViewState>('home');
   const [pages, setPages] = useState<Page[]>(INITIAL_PAGES);
   const [goals] = useState<FinanceGoal[]>(INITIAL_GOALS);
-  const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
   const [zapInput, setZapInput] = useState('');
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
   const [showHabitCapture, setShowHabitCapture] = useState(false);
   const [showFinanceCapture, setShowFinanceCapture] = useState(false);
   const [financeInitialGoalId, setFinanceInitialGoalId] = useState<string | null>(null);
+  const [habitsRefreshToken, setHabitsRefreshToken] = useState(0);
+  const [financeRefreshToken, setFinanceRefreshToken] = useState(0);
 
   const [isAddingInline, setIsAddingInline] = useState(false);
   const [inlineValue, setInlineValue] = useState('');
-  const inlineInputRef = useRef<HTMLInputElement>(null);
+  const inlineInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (isAddingInline && inlineInputRef.current) {
@@ -50,18 +52,44 @@ export default function App() {
   const activePage = activePageId ? pages.find(p => p.id === activePageId) : null;
 
   const handleQuickNote = (title: string, body: string, category: string) => {
+    const safeTitle = sanitizeText(title).trim();
+    const safeBody = sanitizeText(body).trim();
+    const safeCategory = sanitizeText(category).trim();
     const newPage: Page = {
       id: Date.now().toString(),
-      title,
-      icon: 'ðŸ““',
-      category: 'note',
+      title: safeTitle,
+      icon: '??',
+      category: safeCategory || 'note',
       updatedAt: 'Just now',
       blocks: [
-        { id: 'b-title', type: 'heading', content: title },
-        { id: 'b-text', type: 'text', content: body }
+        { id: 'b-title', type: 'heading', content: safeTitle },
+        { id: 'b-text', type: 'text', content: safeBody }
       ]
     };
     setPages(prev => [newPage, ...prev]);
+  };
+
+  const handleInlineTaskFile = (title: string) => {
+    const trimmed = sanitizeText(title).trim();
+    if (!trimmed) return;
+
+    const targetPage = pages.find(page => page.id === 'daily')
+      || pages.find(page => page.category?.toLowerCase() === 'daily')
+      || pages.find(page => page.category?.toLowerCase() === 'system')
+      || pages[0];
+
+    if (!targetPage) return;
+
+    const newBlock: Block = {
+      id: Date.now().toString(),
+      type: 'todo',
+      content: { text: trimmed, completed: false, done: false }
+    };
+
+    setPages(prev => prev.map(page => {
+      if (page.id !== targetPage.id) return page;
+      return { ...page, blocks: [...page.blocks, newBlock] };
+    }));
   };
 
   const toggleTodo = (pageId: string, blockId: string) => {
@@ -85,51 +113,6 @@ export default function App() {
     }));
   };
 
-  const handleAddInlineTodo = () => {
-    const trimmed = inlineValue.trim();
-    if (!trimmed) {
-      setIsAddingInline(false);
-      return;
-    }
-
-    const targetPage = pages.find(page => page.id === 'daily')
-      || pages.find(page => page.category?.toLowerCase() === 'daily')
-      || pages.find(page => page.category?.toLowerCase() === 'system')
-      || pages[0];
-
-    if (!targetPage) {
-      setInlineValue('');
-      setIsAddingInline(false);
-      return;
-    }
-
-    const newBlock: Block = {
-      id: Date.now().toString(),
-      type: 'todo',
-      content: { text: trimmed, completed: false, done: false }
-    };
-
-    setPages(prev => prev.map(page => {
-      if (page.id !== targetPage.id) return page;
-      return { ...page, blocks: [...page.blocks, newBlock] };
-    }));
-
-    setInlineValue('');
-  };
-
-  const handleHabitCapture = (h: Partial<Habit>) => {
-    const newHabit: Habit = {
-      id: Date.now().toString(),
-      name: h.name || 'Untitled Habit',
-      meta: h.meta || 'Daily',
-      color: 'bg-black',
-      data: [0,0,0,0,0,0,0],
-      monthly: 0,
-      yearly: 0
-    };
-    setHabits(prev => [newHabit, ...prev]);
-  };
-
   const openFinanceAdd = (goalId?: string) => {
     setFinanceInitialGoalId(goalId || null);
     setShowFinanceCapture(true);
@@ -143,7 +126,7 @@ export default function App() {
   };
 
   const handleZapCapture = () => {
-    const trimmed = zapInput.trim();
+    const trimmed = sanitizeText(zapInput).trim();
     if (!trimmed) return;
     const newPage: Page = {
       id: Date.now().toString(),
@@ -178,7 +161,7 @@ export default function App() {
           <HomeView
             pages={pages}
             zapInput={zapInput}
-            onZapInputChange={setZapInput}
+            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
             onZapSubmit={handleZapCapture}
             onSelectPage={handleSelectPage}
           />
@@ -188,7 +171,7 @@ export default function App() {
           <HomeView
             pages={pages}
             zapInput={zapInput}
-            onZapInputChange={setZapInput}
+            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
             onZapSubmit={handleZapCapture}
             onSelectPage={handleSelectPage}
           />
@@ -200,23 +183,25 @@ export default function App() {
             isAddingInline={isAddingInline}
             inlineValue={inlineValue}
             inlineInputRef={inlineInputRef}
-            onInlineChange={setInlineValue}
+            onInlineChange={(value) => setInlineValue(sanitizeText(value))}
             onStartInline={() => setIsAddingInline(true)}
-            onCancelInline={() => setIsAddingInline(false)}
-            onSubmitInline={handleAddInlineTodo}
-            onToggleTodo={toggleTodo}
+            onCancelInline={() => {
+              setIsAddingInline(false);
+              setInlineValue('');
+            }}
+            onInlineAdded={handleInlineTaskFile}
             onSelectPage={handleSelectPage}
           />
         );
       case 'habits':
-        return <HabitsView habits={habits} />;
+        return <HabitsView refreshToken={habitsRefreshToken} />;
       case 'finance':
         return (
           <FinanceView
             accounts={INITIAL_ACCOUNTS}
             goals={goals}
-            transactions={INITIAL_TRANSACTIONS}
             onAddGoal={() => openFinanceAdd()}
+            refreshToken={financeRefreshToken}
           />
         );
       default:
@@ -224,7 +209,7 @@ export default function App() {
           <HomeView
             pages={pages}
             zapInput={zapInput}
-            onZapInputChange={setZapInput}
+            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
             onZapSubmit={handleZapCapture}
             onSelectPage={handleSelectPage}
           />
@@ -260,8 +245,20 @@ export default function App() {
         )}
 
         {showCapture && <CaptureModal onClose={() => setShowCapture(false)} onSave={handleQuickNote} />}
-        {showHabitCapture && <HabitCaptureModal onClose={() => setShowHabitCapture(false)} onSave={handleHabitCapture} />}
-        {showFinanceCapture && <FinanceCaptureModal onClose={() => setShowFinanceCapture(false)} goals={goals} initialGoalId={financeInitialGoalId} />}
+        {showHabitCapture && (
+          <HabitCaptureModal
+            onClose={() => setShowHabitCapture(false)}
+            onSaved={() => setHabitsRefreshToken((token) => token + 1)}
+          />
+        )}
+        {showFinanceCapture && (
+          <FinanceCaptureModal
+            onClose={() => setShowFinanceCapture(false)}
+            goals={goals}
+            initialGoalId={financeInitialGoalId}
+            onSaved={() => setFinanceRefreshToken((token) => token + 1)}
+          />
+        )}
         
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-gray-200 rounded-full z-[110]" />
       </div>

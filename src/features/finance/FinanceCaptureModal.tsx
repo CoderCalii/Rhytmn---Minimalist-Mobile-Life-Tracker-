@@ -1,26 +1,89 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Check, X, ArrowUpRight, ArrowDownLeft, Target, Calendar, Tag, MessageSquare } from 'lucide-react';
 import type { FinanceGoal } from '../../types';
+import { sanitizeText } from '../../utils/sanitize';
+import { validateAmount } from './utils/validateFinance';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 interface FinanceCaptureModalProps {
   onClose: () => void;
+  onSaved?: () => void;
   goals?: FinanceGoal[];
-  initialGoalId: string | null;
+  initialGoalId?: string | null;
 }
-const FinanceCaptureModal = ({ onClose, goals = [], initialGoalId }: FinanceCaptureModalProps) => {
-  const [amount, setAmount] = useState('');
-  const [type, setType] = useState('expense'); // 'income' | 'expense' | 'goal'
-  const [selectedGoal, setSelectedGoal] = useState(initialGoalId);
+type TransactionType = 'income' | 'expense' | 'goal';
+
+const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = null }: FinanceCaptureModalProps) => {
+  const { user } = useAuth();
+  const [amount, setAmount] = useState<number | null>(null);
+  const [type, setType] = useState<TransactionType>('expense');
+  const [selectedGoal, setSelectedGoal] = useState<string | null>(initialGoalId);
   const [category, setCategory] = useState('');
   const [showNotes, setShowNotes] = useState(false);
+  const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const transactionTypes = [
+  const transactionTypes: Array<{
+    id: TransactionType;
+    label: string;
+    icon: ReactNode;
+    color: string;
+    categories: string[];
+  }> = [
     { id: 'income', label: 'Income', icon: <ArrowDownLeft size={14} />, color: 'text-emerald-500', categories: ['Salary', 'Gift', 'Investment', 'Refund'] },
     { id: 'expense', label: 'Expense', icon: <ArrowUpRight size={14} />, color: 'text-rose-500', categories: ['Food', 'Transport', 'Shopping', 'Bills'] },
     { id: 'goal', label: 'Goal', icon: <Target size={14} />, color: 'text-purple-600', categories: [] },
   ];
 
-  const currentTypeData = transactionTypes.find(t => t.id === type);
+  const currentTypeData = transactionTypes.find(t => t.id === type) ?? transactionTypes[0];
+
+  const handleConfirm = async () => {
+    if (!user) {
+      setError('Sign in to save entries.');
+      return;
+    }
+    if (amount === null) {
+      setError('Enter an amount.');
+      return;
+    }
+    try {
+      validateAmount(amount);
+    } catch {
+      setError('Enter a valid amount.');
+      return;
+    }
+
+    const selectedGoalName = goals.find((goal) => goal.id === selectedGoal)?.name;
+    const baseCategory = type === 'goal' ? (selectedGoalName ?? 'Goal') : category;
+    const safeCategory = sanitizeText(baseCategory).trim() || 'General';
+    const safeNote = sanitizeText(note).trim();
+    const normalizedAmount = type === 'income' ? Math.abs(amount) : -Math.abs(amount);
+
+    setIsSaving(true);
+    setError(null);
+
+    const { error: insertError } = await supabase
+      .from('finance_entries')
+      .insert({
+        user_id: user.id,
+        amount: normalizedAmount,
+        category: safeCategory,
+        note: safeNote || null
+      });
+
+    if (insertError) {
+      setIsSaving(false);
+      setError('Failed to save entry.');
+      return;
+    }
+
+    setIsSaving(false);
+    onSaved?.();
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-[150] flex items-end justify-center px-4 pb-10 sm:items-center">
@@ -66,8 +129,11 @@ const FinanceCaptureModal = ({ onClose, goals = [], initialGoalId }: FinanceCapt
                 type="number" 
                 autoFocus 
                 placeholder="0" 
-                value={amount} 
-                onChange={(e) => setAmount(e.target.value)} 
+                value={amount ?? ''} 
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setAmount(next === '' ? null : Number(next));
+                }} 
                 className="w-48 bg-transparent outline-none border-none text-center placeholder:text-slate-100" 
               />
             </div>
@@ -85,7 +151,7 @@ const FinanceCaptureModal = ({ onClose, goals = [], initialGoalId }: FinanceCapt
                   {currentTypeData.categories.map(cat => (
                     <button
                       key={cat}
-                      onClick={() => setCategory(cat)}
+                      onClick={() => setCategory(sanitizeText(cat))}
                       className={`px-4 py-2 rounded-2xl text-[10px] font-bold transition-all ${
                         category === cat 
                           ? 'bg-slate-900 text-white shadow-md' 
@@ -138,21 +204,25 @@ const FinanceCaptureModal = ({ onClose, goals = [], initialGoalId }: FinanceCapt
                 <textarea 
                   placeholder="What was this for?"
                   className="w-full mt-3 p-4 bg-slate-50 rounded-3xl text-sm outline-none border-none placeholder:text-slate-300 min-h-[80px] animate-in zoom-in-95 duration-200"
+                  value={note}
+                  onChange={(event) => setNote(sanitizeText(event.target.value))}
                 />
               )}
             </div>
           </div>
 
           <button 
-            onClick={onClose} 
-            className={`w-full py-5 rounded-[2rem] font-black text-base active:scale-95 transition-all shadow-xl ${
+            onClick={handleConfirm}
+            disabled={isSaving || !user}
+            className={`w-full py-5 rounded-[2rem] font-black text-base active:scale-95 transition-all shadow-xl disabled:opacity-60 disabled:cursor-not-allowed ${
               type === 'income' ? 'bg-emerald-500 text-white shadow-emerald-200/50' :
               type === 'expense' ? 'bg-black text-white shadow-slate-200/50' :
               'bg-purple-600 text-white shadow-purple-200/50'
             }`}
           >
-            Confirm Entry
+            {isSaving ? 'Saving...' : 'Confirm Entry'}
           </button>
+          {error && <p className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</p>}
         </div>
       </div>
     </div>
