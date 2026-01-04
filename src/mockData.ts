@@ -43,9 +43,9 @@ export const INITIAL_GOALS: FinanceGoal[] = [
 ];
 
 export const INITIAL_ACCOUNTS: FinanceAccount[] = [
-  { name: 'Main Spending', balance: 12450.80, color: 'bg-black', text: 'text-white', number: '8821' },
-  { name: 'High Yield Savings', balance: 45200.00, color: 'bg-blue-600', text: 'text-white', number: '4410' },
-  { name: 'Business Pro', balance: 8900.25, color: 'bg-emerald-500', text: 'text-white', number: '1002' },
+  { id: 'a1', name: 'Main Spending', balance: 12450.80, color: 'bg-black', lastFour: '8821' },
+  { id: 'a2', name: 'High Yield Savings', balance: 45200.00, color: 'bg-blue-600', lastFour: '4410' },
+  { id: 'a3', name: 'Business Pro', balance: 8900.25, color: 'bg-emerald-500', lastFour: '1002' },
 ];
 
 export const INITIAL_HABITS: Habit[] = [

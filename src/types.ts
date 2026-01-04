@@ -33,11 +33,11 @@ export interface FinanceGoal {
 }
 
 export interface FinanceAccount {
+  id: string;
   name: string;
   balance: number;
   color: string;
-  text: string;
-  number: string;
+  lastFour: string;
 }
 
 export interface FinanceTransaction {
@@ -48,6 +48,17 @@ export interface FinanceTransaction {
   type: 'expense' | 'income';
   date: string;
   icon: ReactNode;
+  accountId?: string | null;
+}
+
+export interface FinanceEntry {
+  id: string;
+  userId: string;
+  accountId?: string | null;
+  amount: number;
+  category: string;
+  note?: string | null;
+  createdAt?: string | null;
 }
 
 export interface Habit {

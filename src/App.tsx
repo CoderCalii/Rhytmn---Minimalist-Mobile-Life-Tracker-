@@ -14,8 +14,8 @@ import HabitsView from './features/habits/HabitsView';
 import HomeView from './features/home/HomeView';
 import PageDetailView from './features/page_detail/PageDetailView';
 import TasksView from './features/tasks/TasksView';
-import { INITIAL_ACCOUNTS, INITIAL_GOALS, INITIAL_PAGES } from './mockData';
-import type { Block, FinanceGoal, Page } from './types';
+import { INITIAL_PAGES } from './mockData';
+import type { Block, Page } from './types';
 import { getTodoCompleted } from './utils/todo';
 import { sanitizeText } from './utils/sanitize';
 
@@ -28,7 +28,6 @@ type ViewState = 'home' | 'tasks' | 'habits' | 'finance' | 'page_detail';
 export default function App() {
   const [view, setView] = useState<ViewState>('home');
   const [pages, setPages] = useState<Page[]>(INITIAL_PAGES);
-  const [goals] = useState<FinanceGoal[]>(INITIAL_GOALS);
   const [zapInput, setZapInput] = useState('');
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
@@ -198,9 +197,6 @@ export default function App() {
       case 'finance':
         return (
           <FinanceView
-            accounts={INITIAL_ACCOUNTS}
-            goals={goals}
-            onAddGoal={() => openFinanceAdd()}
             refreshToken={financeRefreshToken}
           />
         );
@@ -254,7 +250,6 @@ export default function App() {
         {showFinanceCapture && (
           <FinanceCaptureModal
             onClose={() => setShowFinanceCapture(false)}
-            goals={goals}
             initialGoalId={financeInitialGoalId}
             onSaved={() => setFinanceRefreshToken((token) => token + 1)}
           />

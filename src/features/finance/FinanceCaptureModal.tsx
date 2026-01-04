@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Check, X, ArrowUpRight, ArrowDownLeft, Target, Calendar, Tag, MessageSquare } from 'lucide-react';
-import type { FinanceGoal } from '../../types';
+import { ArrowDownLeft, ArrowUpRight, Calendar, Check, MessageSquare, Tag, Target, Wallet, X } from 'lucide-react';
+import type { FinanceAccount, FinanceGoal } from '../../types';
 import { sanitizeText } from '../../utils/sanitize';
 import { validateAmount } from './utils/validateFinance';
 import { supabase } from '../../lib/supabase';
@@ -10,21 +10,53 @@ import { useAuth } from '../../hooks/useAuth';
 interface FinanceCaptureModalProps {
   onClose: () => void;
   onSaved?: () => void;
+  accounts?: FinanceAccount[];
   goals?: FinanceGoal[];
   initialGoalId?: string | null;
 }
-type TransactionType = 'income' | 'expense' | 'goal';
 
-const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = null }: FinanceCaptureModalProps) => {
+type TransactionType = 'income' | 'expense' | 'goal';
+type GoalFlow = 'contribution' | 'withdrawal';
+
+interface FinanceAccountRow {
+  id: string;
+  name: string | null;
+  balance: number | string | null;
+  color: string | null;
+  last_four: string | null;
+}
+
+interface FinanceGoalRow {
+  id: string;
+  name: string | null;
+  target: number | string | null;
+  current: number | string | null;
+  color: string | null;
+}
+
+const FinanceCaptureModal = ({
+  onClose,
+  onSaved,
+  accounts: accountsProp,
+  goals: goalsProp,
+  initialGoalId = null
+}: FinanceCaptureModalProps) => {
   const { user } = useAuth();
   const [amount, setAmount] = useState<number | null>(null);
   const [type, setType] = useState<TransactionType>('expense');
+  const [goalFlow, setGoalFlow] = useState<GoalFlow>('contribution');
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialGoalId);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [category, setCategory] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [accounts, setAccounts] = useState<FinanceAccount[]>(accountsProp ?? []);
+  const [goals, setGoals] = useState<FinanceGoal[]>(goalsProp ?? []);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [goalsLoading, setGoalsLoading] = useState(false);
 
   const transactionTypes: Array<{
     id: TransactionType;
@@ -39,6 +71,88 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
   ];
 
   const currentTypeData = transactionTypes.find(t => t.id === type) ?? transactionTypes[0];
+
+  useEffect(() => {
+    if (accountsProp && accountsProp.length) {
+      setAccounts(accountsProp);
+    }
+  }, [accountsProp]);
+
+  useEffect(() => {
+    if (goalsProp && goalsProp.length) {
+      setGoals(goalsProp);
+    }
+  }, [goalsProp]);
+
+  useEffect(() => {
+    if (!user) {
+      setAccounts([]);
+      setGoals([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    if (!accountsProp || accountsProp.length === 0) {
+      setAccountsLoading(true);
+      supabase
+        .from('finance_accounts')
+        .select('id, name, balance, color, last_four')
+        .order('created_at', { ascending: false })
+        .then(({ data, error: fetchError }) => {
+          if (!isMounted) return;
+          if (!fetchError) {
+            const rows = (data ?? []) as FinanceAccountRow[];
+            setAccounts(rows.map((row) => ({
+              id: row.id,
+              name: row.name ?? 'Account',
+              balance: Number(row.balance) || 0,
+              color: row.color ?? 'bg-black',
+              lastFour: row.last_four ?? '0000'
+            })));
+          }
+          setAccountsLoading(false);
+        });
+    }
+
+    if (!goalsProp || goalsProp.length === 0) {
+      setGoalsLoading(true);
+      supabase
+        .from('finance_goals')
+        .select('id, name, target, current, color')
+        .order('created_at', { ascending: false })
+        .then(({ data, error: fetchError }) => {
+          if (!isMounted) return;
+          if (!fetchError) {
+            const rows = (data ?? []) as FinanceGoalRow[];
+            setGoals(rows.map((row) => ({
+              id: row.id,
+              name: row.name ?? 'Goal',
+              target: Number(row.target) || 0,
+              current: Number(row.current) || 0,
+              color: row.color ?? 'bg-purple-50'
+            })));
+          }
+          setGoalsLoading(false);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, accountsProp, goalsProp]);
+
+  useEffect(() => {
+    if (!selectedAccountId && accounts.length > 0) {
+      setSelectedAccountId(accounts[0].id);
+    }
+  }, [accounts, selectedAccountId]);
+
+  useEffect(() => {
+    if (!selectedGoal && goals.length > 0) {
+      setSelectedGoal(initialGoalId ?? goals[0].id);
+    }
+  }, [goals, selectedGoal, initialGoalId]);
 
   const handleConfirm = async () => {
     if (!user) {
@@ -56,33 +170,109 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
       return;
     }
 
-    const selectedGoalName = goals.find((goal) => goal.id === selectedGoal)?.name;
-    const baseCategory = type === 'goal' ? (selectedGoalName ?? 'Goal') : category;
-    const safeCategory = sanitizeText(baseCategory).trim() || 'General';
+    const baseAmount = Math.abs(amount);
+    let entryAmount = baseAmount;
+    let entryCategory = '';
+    let entryAccountId: string | null = null;
+
     const safeNote = sanitizeText(note).trim();
-    const normalizedAmount = type === 'income' ? Math.abs(amount) : -Math.abs(amount);
 
-    setIsSaving(true);
-    setError(null);
+    if (type === 'income' || type === 'expense') {
+      if (!selectedAccountId) {
+        setError('Choose an account.');
+        return;
+      }
+      const account = accounts.find((item) => item.id === selectedAccountId);
+      if (!account) {
+        setError('Account not found.');
+        return;
+      }
 
-    const { error: insertError } = await supabase
-      .from('finance_entries')
-      .insert({
-        user_id: user.id,
-        amount: normalizedAmount,
-        category: safeCategory,
-        note: safeNote || null
-      });
+      entryAmount = type === 'income' ? baseAmount : -baseAmount;
+      entryCategory = sanitizeText(category).trim() || 'General';
+      entryAccountId = selectedAccountId;
 
-    if (insertError) {
+      setIsSaving(true);
+      setError(null);
+
+      const { error: insertError } = await supabase
+        .from('finance_entries')
+        .insert({
+          user_id: user.id,
+          amount: entryAmount,
+          category: entryCategory,
+          note: safeNote || null,
+          account_id: entryAccountId
+        });
+
+      if (insertError) {
+        setIsSaving(false);
+        setError('Failed to save entry.');
+        return;
+      }
+
+      const nextBalance = account.balance + entryAmount;
+      await supabase
+        .from('finance_accounts')
+        .update({ balance: nextBalance })
+        .eq('id', account.id);
+
       setIsSaving(false);
-      setError('Failed to save entry.');
+      onSaved?.();
+      onClose();
       return;
     }
 
-    setIsSaving(false);
-    onSaved?.();
-    onClose();
+    if (type === 'goal') {
+      if (!selectedGoal) {
+        setError('Choose a goal.');
+        return;
+      }
+      const goal = goals.find((item) => item.id === selectedGoal);
+      if (!goal) {
+        setError('Goal not found.');
+        return;
+      }
+
+      const signedGoalAmount = goalFlow === 'withdrawal' ? -baseAmount : baseAmount;
+      const nextCurrent = goal.current + signedGoalAmount;
+
+      if (nextCurrent < 0) {
+        setError('Cannot withdraw more than the goal balance.');
+        return;
+      }
+
+      entryAmount = signedGoalAmount;
+      entryCategory = sanitizeText(goal.name).trim() || 'Goal';
+
+      setIsSaving(true);
+      setError(null);
+
+      const { error: insertError } = await supabase
+        .from('finance_entries')
+        .insert({
+          user_id: user.id,
+          amount: entryAmount,
+          category: entryCategory,
+          note: safeNote || null,
+          account_id: null
+        });
+
+      if (insertError) {
+        setIsSaving(false);
+        setError('Failed to save entry.');
+        return;
+      }
+
+      await supabase
+        .from('finance_goals')
+        .update({ current: nextCurrent })
+        .eq('id', goal.id);
+
+      setIsSaving(false);
+      onSaved?.();
+      onClose();
+    }
   };
 
   return (
@@ -91,7 +281,6 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
       
       <div className="relative w-full max-w-sm bg-white rounded-[3.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-20 duration-500">
         <div className="p-8">
-          {/* Header */}
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full">
               <Calendar size={12} className="text-slate-400" />
@@ -102,7 +291,6 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
             </button>
           </div>
 
-          {/* Type Selector */}
           <div className="mb-8 p-1 bg-slate-100 rounded-[2rem] flex items-center">
             {transactionTypes.map((t) => (
               <button
@@ -121,7 +309,6 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
             ))}
           </div>
           
-          {/* Amount Display */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center text-7xl font-black tracking-tighter">
               <span className={`text-3xl mr-1 self-start mt-4 opacity-20 ${currentTypeData.color}`}>$</span>
@@ -139,9 +326,7 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
             </div>
           </div>
 
-          {/* Contextual Sections */}
           <div className="space-y-6 mb-8">
-            {/* Category Chips - Only for Income/Expense */}
             {type !== 'goal' && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -165,14 +350,66 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
               </div>
             )}
 
-            {/* Goal Selector - Only for Goal (Purple Themed) */}
-            {type === 'goal' && (
+            {type !== 'goal' && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
-                  <Target size={10} className="text-purple-600" /> Destination
+                  <Wallet size={10} /> Account
                 </p>
+                {accountsLoading ? (
+                  <div className="text-[10px] font-bold text-slate-400">Loading accounts...</div>
+                ) : accounts.length === 0 ? (
+                  <div className="text-[10px] font-bold text-slate-400">No accounts found.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {accounts.map((account) => (
+                      <button
+                        key={account.id}
+                        onClick={() => setSelectedAccountId(account.id)}
+                        className={`px-4 py-2 rounded-2xl text-[10px] font-bold transition-all ${
+                          selectedAccountId === account.id
+                            ? 'bg-black text-white shadow-md'
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        }`}
+                      >
+                        {account.name} - {account.lastFour}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {type === 'goal' && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Target size={10} className="text-purple-600" /> Destination
+                  </p>
+                  <div className="flex items-center gap-1 rounded-full bg-purple-50 p-1">
+                    <button
+                      onClick={() => setGoalFlow('contribution')}
+                      className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest ${
+                        goalFlow === 'contribution' ? 'bg-white text-purple-700 shadow-sm' : 'text-purple-300'
+                      }`}
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => setGoalFlow('withdrawal')}
+                      className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest ${
+                        goalFlow === 'withdrawal' ? 'bg-white text-purple-700 shadow-sm' : 'text-purple-300'
+                      }`}
+                    >
+                      Withdraw
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {goals.length > 0 ? goals.map((goal) => (
+                  {goalsLoading ? (
+                    <div className="col-span-2 py-4 px-4 bg-slate-50 rounded-2xl text-[10px] font-bold text-slate-400 text-center italic">
+                      Loading goals...
+                    </div>
+                  ) : goals.length > 0 ? goals.map((goal) => (
                     <button 
                       key={goal.id} 
                       onClick={() => setSelectedGoal(goal.id)} 
@@ -192,7 +429,6 @@ const FinanceCaptureModal = ({ onClose, onSaved, goals = [], initialGoalId = nul
               </div>
             )}
 
-            {/* Note Toggle */}
             <div>
               <button 
                 onClick={() => setShowNotes(!showNotes)}
