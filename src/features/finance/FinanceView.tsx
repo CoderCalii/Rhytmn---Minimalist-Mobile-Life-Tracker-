@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Car, ChevronDown, ChevronUp, Plus, TrendingUp, Tv, Utensils, Wallet, Zap } from 'lucide-react';
 import BrandLogo from '../../components/BrandLogo';
 import { supabase } from '../../lib/supabase';
+import { listFinanceEntries } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
 import type { FinanceAccount, FinanceGoal, FinanceTransaction } from '../../types';
 import { sanitizeText } from '../../utils/sanitize';
@@ -27,15 +28,6 @@ interface FinanceGoalRow {
   target: number | string | null;
   current: number | string | null;
   color: string | null;
-}
-
-interface FinanceEntryRow {
-  id: string;
-  amount: number | string;
-  category?: string | null;
-  note?: string | null;
-  account_id?: string | null;
-  created_at?: string | null;
 }
 
 const formatEntryDate = (value?: string | null) => {
@@ -180,19 +172,14 @@ const FinanceView = ({ refreshToken = 0 }: FinanceViewProps) => {
     setEntriesLoading(true);
     setEntriesError(null);
 
-    const { data, error } = await supabase
-      .from('finance_entries')
-      .select('id, amount, category, note, account_id, created_at')
-      .order('created_at', { ascending: false });
-
+    const { entries, error } = await listFinanceEntries({ limit: 100 });
     if (error) {
-      setEntriesError('Failed to load entries.');
+      setEntriesError(error);
       setTransactions([]);
       setEntriesLoading(false);
       return;
     }
 
-    const entries = (data ?? []) as FinanceEntryRow[];
     const mapped = entries.map((entry) => {
       const rawAmount = Number(entry.amount);
       const amountValue = Number.isFinite(rawAmount) ? rawAmount : 0;

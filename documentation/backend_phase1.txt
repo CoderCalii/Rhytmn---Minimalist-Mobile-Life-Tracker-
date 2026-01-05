@@ -1,0 +1,30 @@
+﻿Phase 2 - Finance note encryption (Model A)
+
+Edge Function
+- Path: supabase/functions/finance-entries/index.ts
+- Actions:
+  - upsert: encrypts note with AES-256-GCM and stores note_ciphertext, note_iv, note_key_version
+  - list: returns entries with decrypted note for the signed-in user
+- Future Model B: clients can send note_ciphertext, note_iv, note_key_version instead of note
+- Deploy with: npx supabase functions deploy finance-entries --no-verify-jwt
+  (Edge JWT verification can reject valid client tokens; the function still validates via auth.getUser(token).)
+
+Required environment variables (Edge Functions)
+- FINANCE_NOTE_ACTIVE_VERSION=1
+- FINANCE_NOTE_KEY_V1=<base64 32 bytes>
+- SUPABASE_URL, SUPABASE_ANON_KEY (provided by Supabase)
+
+SQL hardening (run in Supabase SQL editor)
+- If plaintext column still exists, keep it null-only or drop it:
+  - ALTER TABLE finance_entries DROP COLUMN IF EXISTS note;
+  - or:
+    ALTER TABLE finance_entries
+      ADD CONSTRAINT finance_entries_note_plaintext_chk CHECK (note IS NULL);
+
+- Enforce encrypted column consistency:
+  ALTER TABLE finance_entries
+    ADD CONSTRAINT finance_entries_note_encrypted_chk
+    CHECK (
+      (note_ciphertext IS NULL AND note_iv IS NULL AND note_key_version IS NULL)
+      OR (note_ciphertext IS NOT NULL AND note_iv IS NOT NULL AND note_key_version IS NOT NULL)
+    );

@@ -5,6 +5,7 @@ import type { FinanceAccount, FinanceGoal } from '../../types';
 import { sanitizeText } from '../../utils/sanitize';
 import { validateAmount } from './utils/validateFinance';
 import { supabase } from '../../lib/supabase';
+import { createFinanceEntry } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
 
 interface FinanceCaptureModalProps {
@@ -195,19 +196,16 @@ const FinanceCaptureModal = ({
       setIsSaving(true);
       setError(null);
 
-      const { error: insertError } = await supabase
-        .from('finance_entries')
-        .insert({
-          user_id: user.id,
-          amount: entryAmount,
-          category: entryCategory,
-          note: safeNote || null,
-          account_id: entryAccountId
-        });
+      const { error: insertError } = await createFinanceEntry({
+        amount: entryAmount,
+        category: entryCategory,
+        note: safeNote || null,
+        account_id: entryAccountId
+      });
 
       if (insertError) {
         setIsSaving(false);
-        setError('Failed to save entry.');
+        setError(insertError);
         return;
       }
 
@@ -248,19 +246,16 @@ const FinanceCaptureModal = ({
       setIsSaving(true);
       setError(null);
 
-      const { error: insertError } = await supabase
-        .from('finance_entries')
-        .insert({
-          user_id: user.id,
-          amount: entryAmount,
-          category: entryCategory,
-          note: safeNote || null,
-          account_id: null
-        });
+      const { error: insertError } = await createFinanceEntry({
+        amount: entryAmount,
+        category: entryCategory,
+        note: safeNote || null,
+        account_id: null
+      });
 
       if (insertError) {
         setIsSaving(false);
-        setError('Failed to save entry.');
+        setError(insertError);
         return;
       }
 
