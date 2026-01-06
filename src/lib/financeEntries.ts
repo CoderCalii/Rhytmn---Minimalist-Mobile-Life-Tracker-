@@ -6,6 +6,8 @@ export type FinanceEntryRow = {
   category: string | null
   note: string | null
   account_id: string | null
+  to_account_id?: string | null
+  type?: string | null
   created_at: string | null
 }
 
@@ -19,6 +21,8 @@ type CreateEntryInput = {
   category: string
   note?: string | null
   account_id?: string | null
+  to_account_id?: string | null
+  type?: 'transfer' | 'income' | 'expense' | 'goal'
 }
 
 const getSessionOrError = async () => {

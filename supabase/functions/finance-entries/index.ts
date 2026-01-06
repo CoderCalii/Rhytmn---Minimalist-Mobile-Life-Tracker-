@@ -7,6 +7,8 @@ type EntryRow = {
   amount: number
   category: string | null
   account_id: string | null
+  to_account_id: string | null
+  type: string | null
   created_at: string | null
   note_ciphertext: string | null
   note_iv: string | null
@@ -134,11 +136,7 @@ const parseUuid = (value: unknown) => {
 
 const buildNotePayload = async (noteValue: unknown) => {
   if (noteValue === null) {
-    return {
-      note_ciphertext: null,
-      note_iv: null,
-      note_key_version: null
-    }
+    return null
   }
 
   if (typeof noteValue !== 'string') {
@@ -147,11 +145,7 @@ const buildNotePayload = async (noteValue: unknown) => {
 
   const note = normalizeNote(noteValue)
   if (!note) {
-    return {
-      note_ciphertext: null,
-      note_iv: null,
-      note_key_version: null
-    }
+    return null
   }
 
   const encrypted = await encryptNote(note)
@@ -221,7 +215,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from('finance_entries')
-      .select('id, amount, category, account_id, created_at, note_ciphertext, note_iv, note_key_version')
+      .select('id, amount, category, account_id, to_account_id, type, created_at, note_ciphertext, note_iv, note_key_version')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -250,6 +244,8 @@ Deno.serve(async (req) => {
         amount: entry.amount,
         category: entry.category,
         account_id: entry.account_id,
+        to_account_id: entry.to_account_id,
+        type: entry.type,
         created_at: entry.created_at,
         note
       }
@@ -279,6 +275,34 @@ Deno.serve(async (req) => {
     return jsonResponse(400, { status: 'error', error: { message: 'Invalid account_id' } })
   }
 
+  const typeValue = parseString(payload.type)
+  const entryType = typeValue ? typeValue.toLowerCase() : null
+  if (entryType && entryType !== 'transfer') {
+    return jsonResponse(400, { status: 'error', error: { message: 'Invalid type' } })
+  }
+
+  const hasToAccountId = Object.prototype.hasOwnProperty.call(payload, 'to_account_id')
+  const toAccountId = hasToAccountId
+    ? (payload.to_account_id === null ? null : parseUuid(payload.to_account_id))
+    : undefined
+  if (hasToAccountId && payload.to_account_id !== null && !toAccountId) {
+    return jsonResponse(400, { status: 'error', error: { message: 'Invalid to_account_id' } })
+  }
+
+  if (entryType === 'transfer') {
+    if (!hasAccountId || !accountId) {
+      return jsonResponse(400, { status: 'error', error: { message: 'Missing account_id' } })
+    }
+    if (!hasToAccountId || !toAccountId) {
+      return jsonResponse(400, { status: 'error', error: { message: 'Missing to_account_id' } })
+    }
+    if (accountId === toAccountId) {
+      return jsonResponse(400, { status: 'error', error: { message: 'Accounts must differ' } })
+    }
+  } else if (hasToAccountId) {
+    return jsonResponse(400, { status: 'error', error: { message: 'to_account_id only allowed for transfers' } })
+  }
+
   const hasNote = Object.prototype.hasOwnProperty.call(payload, 'note')
   let notePayload: Record<string, unknown> | null = null
   if (hasNote) {
@@ -297,6 +321,14 @@ Deno.serve(async (req) => {
 
   if (hasAccountId) {
     insertPayload.account_id = accountId ?? null
+  }
+
+  if (entryType) {
+    insertPayload.type = entryType
+  }
+
+  if (hasToAccountId) {
+    insertPayload.to_account_id = toAccountId ?? null
   }
 
   if (notePayload) {

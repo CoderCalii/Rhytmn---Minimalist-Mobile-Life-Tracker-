@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDownLeft, ArrowUpRight, Calendar, Check, MessageSquare, Tag, Target, Wallet, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Calendar, Check, MessageSquare, Tag, Target, Wallet, X } from 'lucide-react';
 import type { FinanceAccount, FinanceGoal } from '../../types';
 import { sanitizeText } from '../../utils/sanitize';
-import { validateAmount } from './utils/validateFinance';
+import { hasSufficientBalance, validateAmount } from './utils/validateFinance';
 import { supabase } from '../../lib/supabase';
 import { createFinanceEntry } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,9 +14,11 @@ interface FinanceCaptureModalProps {
   accounts?: FinanceAccount[];
   goals?: FinanceGoal[];
   initialGoalId?: string | null;
+  currencySymbol?: '$' | '₱';
+  currencyCode?: 'USD' | 'PHP';
 }
 
-type TransactionType = 'income' | 'expense' | 'goal';
+type TransactionType = 'income' | 'expense' | 'goal' | 'transfer';
 type GoalFlow = 'contribution' | 'withdrawal';
 
 interface FinanceAccountRow {
@@ -40,19 +42,27 @@ const FinanceCaptureModal = ({
   onSaved,
   accounts: accountsProp,
   goals: goalsProp,
-  initialGoalId = null
+  initialGoalId = null,
+  currencySymbol,
+  currencyCode
 }: FinanceCaptureModalProps) => {
   const { user } = useAuth();
+  const resolvedCurrencyCode = currencyCode ?? (currencySymbol === '₱' ? 'PHP' : 'USD');
+  const resolvedCurrencySymbol = currencySymbol ?? (resolvedCurrencyCode === 'PHP' ? '₱' : '$');
+  const toastTimeoutRef = useRef<number | null>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
   const [amount, setAmount] = useState<number | null>(null);
   const [type, setType] = useState<TransactionType>('expense');
   const [goalFlow, setGoalFlow] = useState<GoalFlow>('contribution');
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialGoalId);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedDestinationAccountId, setSelectedDestinationAccountId] = useState<string | null>(null);
   const [category, setCategory] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [accounts, setAccounts] = useState<FinanceAccount[]>(accountsProp ?? []);
   const [goals, setGoals] = useState<FinanceGoal[]>(goalsProp ?? []);
@@ -68,10 +78,42 @@ const FinanceCaptureModal = ({
   }> = [
     { id: 'income', label: 'Income', icon: <ArrowDownLeft size={14} />, color: 'text-emerald-500', categories: ['Salary', 'Gift', 'Investment', 'Refund'] },
     { id: 'expense', label: 'Expense', icon: <ArrowUpRight size={14} />, color: 'text-rose-500', categories: ['Food', 'Transport', 'Shopping', 'Bills'] },
+    { id: 'transfer', label: 'Transfer', icon: <ArrowLeftRight size={14} />, color: 'text-blue-600', categories: [] },
     { id: 'goal', label: 'Goal', icon: <Target size={14} />, color: 'text-purple-600', categories: [] },
   ];
 
   const currentTypeData = transactionTypes.find(t => t.id === type) ?? transactionTypes[0];
+  const transferAmount = amount === null ? 0 : Math.abs(amount);
+  const goalSelectedAccount = selectedAccountId
+    ? accounts.find((account) => account.id === selectedAccountId) ?? null
+    : null;
+  const goalHasInsufficientFunds =
+    type === 'goal' &&
+    goalFlow === 'contribution' &&
+    !!goalSelectedAccount &&
+    !hasSufficientBalance(goalSelectedAccount.balance, transferAmount);
+  const isConfirmDisabled =
+    isSaving || !user || (type === 'goal' && (!selectedAccountId || goalHasInsufficientFunds));
+
+  const formatMoney = (value: number) => {
+    const formatted = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${resolvedCurrencySymbol}${formatted}`;
+  };
+
+  const showToast = (nextToast: { type: 'success' | 'error'; message: string }) => {
+    setToast(nextToast);
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+      if (closeTimeoutRef.current) window.clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (accountsProp && accountsProp.length) {
@@ -150,6 +192,25 @@ const FinanceCaptureModal = ({
   }, [accounts, selectedAccountId]);
 
   useEffect(() => {
+    if (selectedDestinationAccountId || accounts.length === 0) {
+      return;
+    }
+    if (accounts.length === 1) {
+      setSelectedDestinationAccountId(null);
+      return;
+    }
+    const fallback = accounts.find((account) => account.id !== selectedAccountId)?.id ?? accounts[0].id;
+    setSelectedDestinationAccountId(fallback);
+  }, [accounts, selectedDestinationAccountId, selectedAccountId]);
+
+  useEffect(() => {
+    if (!selectedAccountId || !selectedDestinationAccountId) return;
+    if (selectedAccountId !== selectedDestinationAccountId) return;
+    const alternative = accounts.find((account) => account.id !== selectedAccountId)?.id ?? null;
+    setSelectedDestinationAccountId(alternative);
+  }, [accounts, selectedAccountId, selectedDestinationAccountId]);
+
+  useEffect(() => {
     if (!selectedGoal && goals.length > 0) {
       setSelectedGoal(initialGoalId ?? goals[0].id);
     }
@@ -177,6 +238,52 @@ const FinanceCaptureModal = ({
     let entryAccountId: string | null = null;
 
     const safeNote = sanitizeText(note).trim();
+
+    if (type === 'transfer') {
+      if (!selectedAccountId || !selectedDestinationAccountId) {
+        setError('Choose both accounts.');
+        return;
+      }
+      if (selectedAccountId === selectedDestinationAccountId) {
+        setError('Choose two different accounts.');
+        return;
+      }
+
+      const sourceAccount = accounts.find((item) => item.id === selectedAccountId);
+      const destinationAccount = accounts.find((item) => item.id === selectedDestinationAccountId);
+      if (!sourceAccount || !destinationAccount) {
+        setError('Account not found.');
+        return;
+      }
+
+      entryAmount = baseAmount;
+      entryCategory = 'Transfer';
+
+      setIsSaving(true);
+      setError(null);
+
+      const { error: transferError } = await supabase.rpc('handle_transfer', {
+        p_from_account_id: sourceAccount.id,
+        p_to_account_id: destinationAccount.id,
+        p_amount: baseAmount,
+        p_currency_code: resolvedCurrencyCode,
+        p_note: safeNote || null
+      });
+
+      if (transferError) {
+        setIsSaving(false);
+        showToast({ type: 'error', message: 'Transfer failed. Please try again.' });
+        return;
+      }
+
+      setIsSaving(false);
+      showToast({ type: 'success', message: `Transferred ${formatMoney(baseAmount)} successfully!` });
+      closeTimeoutRef.current = window.setTimeout(() => {
+        onSaved?.();
+        onClose();
+      }, 600);
+      return;
+    }
 
     if (type === 'income' || type === 'expense') {
       if (!selectedAccountId) {
@@ -231,6 +338,15 @@ const FinanceCaptureModal = ({
         setError('Goal not found.');
         return;
       }
+      if (!selectedAccountId) {
+        setError('Choose an account.');
+        return;
+      }
+      const fundingAccount = goalSelectedAccount;
+      if (!fundingAccount) {
+        setError('Account not found.');
+        return;
+      }
 
       const signedGoalAmount = goalFlow === 'withdrawal' ? -baseAmount : baseAmount;
       const nextCurrent = goal.current + signedGoalAmount;
@@ -239,34 +355,40 @@ const FinanceCaptureModal = ({
         setError('Cannot withdraw more than the goal balance.');
         return;
       }
-
-      entryAmount = signedGoalAmount;
-      entryCategory = sanitizeText(goal.name).trim() || 'Goal';
+      if (goalFlow === 'contribution' && !hasSufficientBalance(fundingAccount.balance, baseAmount)) {
+        setError('Insufficient funds in the selected account.');
+        return;
+      }
 
       setIsSaving(true);
       setError(null);
 
-      const { error: insertError } = await createFinanceEntry({
-        amount: entryAmount,
-        category: entryCategory,
-        note: safeNote || null,
-        account_id: null
+      const { error: goalError } = await supabase.rpc('handle_goal_transaction', {
+        p_goal_id: goal.id,
+        p_account_id: fundingAccount.id,
+        p_amount: baseAmount,
+        p_flow: goalFlow,
+        p_currency_code: resolvedCurrencyCode,
+        p_note: safeNote || null
       });
 
-      if (insertError) {
+      if (goalError) {
         setIsSaving(false);
-        setError(insertError);
+        showToast({ type: 'error', message: 'Goal update failed. Please try again.' });
         return;
       }
 
-      await supabase
-        .from('finance_goals')
-        .update({ current: nextCurrent })
-        .eq('id', goal.id);
-
       setIsSaving(false);
-      onSaved?.();
-      onClose();
+      showToast({
+        type: 'success',
+        message: goalFlow === 'contribution'
+          ? `${formatMoney(baseAmount)} added to ${goal.name}!`
+          : `${formatMoney(baseAmount)} withdrawn from ${goal.name}!`
+      });
+      closeTimeoutRef.current = window.setTimeout(() => {
+        onSaved?.();
+        onClose();
+      }, 600);
     }
   };
 
@@ -306,7 +428,7 @@ const FinanceCaptureModal = ({
           
           <div className="text-center mb-8">
             <div className="flex items-center justify-center text-7xl font-black tracking-tighter">
-              <span className={`text-3xl mr-1 self-start mt-4 opacity-20 ${currentTypeData.color}`}>$</span>
+              <span className={`text-3xl mr-1 self-start mt-4 opacity-20 ${currentTypeData.color}`}>{resolvedCurrencySymbol}</span>
               <input 
                 type="number" 
                 autoFocus 
@@ -322,7 +444,45 @@ const FinanceCaptureModal = ({
           </div>
 
           <div className="space-y-6 mb-8">
-            {type !== 'goal' && (
+            {type === 'transfer' ? (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Wallet size={10} /> FROM ACCOUNT
+                </p>
+                {accountsLoading ? (
+                  <div className="text-[10px] font-bold text-slate-400">Loading accounts...</div>
+                ) : accounts.length === 0 ? (
+                  <div className="text-[10px] font-bold text-slate-400">No accounts found.</div>
+                ) : (
+                <div className="flex flex-wrap gap-2">
+                  {accounts.map((account) => {
+                    const isSelected = selectedAccountId === account.id;
+                    const isDisabled = account.id === selectedDestinationAccountId;
+                    const isOverdraft = isSelected && transferAmount > account.balance;
+                    return (
+                      <button
+                        key={account.id}
+                        onClick={() => setSelectedAccountId(account.id)}
+                        disabled={isDisabled}
+                        className={`px-4 py-2 rounded-2xl text-left text-[10px] font-bold transition-all ${
+                          isSelected
+                            ? 'bg-black text-white shadow-md'
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        } ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      >
+                        <span className="block">{account.name} - {account.lastFour}</span>
+                        {isSelected && (
+                          <span className={`mt-1 block text-[9px] font-semibold ${isOverdraft ? 'text-rose-500' : 'text-slate-300'}`}>
+                            Current: {formatMoney(account.balance)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                )}
+              </div>
+            ) : type !== 'goal' ? (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
                   <Tag size={10} /> Category
@@ -343,9 +503,47 @@ const FinanceCaptureModal = ({
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {type !== 'goal' && (
+            {type === 'transfer' ? (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Wallet size={10} /> TO ACCOUNT
+                </p>
+                {accountsLoading ? (
+                  <div className="text-[10px] font-bold text-slate-400">Loading accounts...</div>
+                ) : accounts.length < 2 ? (
+                  <div className="text-[10px] font-bold text-slate-400">Add another account to transfer.</div>
+                ) : (
+                <div className="flex flex-wrap gap-2">
+                  {accounts.map((account) => {
+                    const isSelected = selectedDestinationAccountId === account.id;
+                    const isDisabled = account.id === selectedAccountId;
+                    const nextBalance = account.balance + transferAmount;
+                    return (
+                      <button
+                        key={account.id}
+                        onClick={() => setSelectedDestinationAccountId(account.id)}
+                        disabled={isDisabled}
+                        className={`px-4 py-2 rounded-2xl text-left text-[10px] font-bold transition-all ${
+                          isSelected
+                            ? 'bg-black text-white shadow-md'
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        } ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      >
+                        <span className="block">{account.name} - {account.lastFour}</span>
+                        {isSelected && (
+                          <span className="mt-1 block text-[9px] font-semibold text-blue-200">
+                            After: {formatMoney(nextBalance)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                )}
+              </div>
+            ) : type !== 'goal' ? (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
                   <Wallet size={10} /> Account
@@ -372,7 +570,7 @@ const FinanceCaptureModal = ({
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
             {type === 'goal' && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
@@ -424,6 +622,56 @@ const FinanceCaptureModal = ({
               </div>
             )}
 
+            {type === 'goal' && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <Wallet size={10} /> {goalFlow === 'contribution' ? 'FUND FROM' : 'WITHDRAW TO'}
+                </p>
+                {accountsLoading ? (
+                  <div className="text-[10px] font-bold text-slate-400">Loading accounts...</div>
+                ) : accounts.length === 0 ? (
+                  <div className="text-[10px] font-bold text-slate-400">No accounts found.</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {accounts.map((account) => {
+                      const isSelected = selectedAccountId === account.id;
+                      const isInsufficient =
+                        isSelected &&
+                        goalFlow === 'contribution' &&
+                        !hasSufficientBalance(account.balance, transferAmount);
+                      const projectedBalance = goalFlow === 'contribution'
+                        ? account.balance - transferAmount
+                        : account.balance + transferAmount;
+
+                      return (
+                        <button
+                          key={account.id}
+                          onClick={() => setSelectedAccountId(account.id)}
+                          className={`px-4 py-2 rounded-2xl text-left text-[10px] font-bold transition-all ${
+                            isSelected
+                              ? 'bg-black text-white shadow-md'
+                              : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="block">{account.name} - {account.lastFour}</span>
+                          {isSelected && (
+                            <>
+                              <span className={`mt-1 block text-[9px] font-semibold ${isInsufficient ? 'text-rose-500' : 'text-slate-300'}`}>
+                                Current: {formatMoney(account.balance)}
+                              </span>
+                              <span className="mt-1 block text-[9px] font-semibold text-blue-200">
+                                Projected Balance: {formatMoney(projectedBalance)}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <button 
                 onClick={() => setShowNotes(!showNotes)}
@@ -444,16 +692,31 @@ const FinanceCaptureModal = ({
 
           <button 
             onClick={handleConfirm}
-            disabled={isSaving || !user}
+            disabled={isConfirmDisabled}
             className={`w-full py-5 rounded-[2rem] font-black text-base active:scale-95 transition-all shadow-xl disabled:opacity-60 disabled:cursor-not-allowed ${
               type === 'income' ? 'bg-emerald-500 text-white shadow-emerald-200/50' :
               type === 'expense' ? 'bg-black text-white shadow-slate-200/50' :
+              type === 'transfer' ? 'bg-blue-600 text-white shadow-blue-200/50' :
               'bg-purple-600 text-white shadow-purple-200/50'
             }`}
           >
-            {isSaving ? 'Saving...' : 'Confirm Entry'}
+            {isSaving ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <span className="h-4 w-4 rounded-full border-2 border-white/60 border-t-white animate-spin" />
+                Saving...
+              </span>
+            ) : 'Confirm Entry'}
           </button>
           {error && <p className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</p>}
+          {toast && (
+            <div
+              className={`mt-3 rounded-2xl px-4 py-2 text-center text-xs font-semibold ${
+                toast.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+              }`}
+            >
+              {toast.message}
+            </div>
+          )}
         </div>
       </div>
     </div>
