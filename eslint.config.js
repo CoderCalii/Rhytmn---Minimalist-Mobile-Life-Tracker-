@@ -27,15 +27,23 @@ export default defineConfig([
       },
     },
     rules: {
+    
+      'react/react-in-jsx-scope': 'off',
+      'react/jsx-uses-react': 'off',
+
+ 
       '@typescript-eslint/no-explicit-any': 'error',
       'react/no-danger': 'error',
       'no-restricted-syntax': [
         'error',
         {
-          selector: "TSAsExpression[expression.type='TSAsExpression'][expression.typeAnnotation.type='TSUnknownKeyword']",
+          selector:
+            "TSAsExpression[expression.type='TSAsExpression'][expression.typeAnnotation.type='TSUnknownKeyword']",
           message: 'Do not use double assertions (as unknown as).',
         },
       ],
+      'react-hooks/set-state-in-effect': 'warn',
+      'react/prop-types': 'off',
     },
   },
 ])

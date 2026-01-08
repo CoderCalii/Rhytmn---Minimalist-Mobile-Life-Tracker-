@@ -1,30 +1,82 @@
-import { useEffect, useState } from 'react';
-import type { RefObject } from 'react';
-import { CheckCircle2, Circle, Clock, Plus, Search } from 'lucide-react';
-import BrandLogo from '../../components/BrandLogo';
-import { INITIAL_PAGES } from '../../mockData';
-import type { Page } from '../../types';
-import { sanitizeText } from '../../utils/sanitize';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
+import { useEffect, useState } from 'react'
+import type { RefObject } from 'react'
+import { differenceInHours, format, formatDistanceToNowStrict } from 'date-fns'
+import { INITIAL_PAGES } from '../../mockData'
+import type { Page } from '../../types'
+import { sanitizeText } from '../../utils/sanitize'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
+import { NoteCard } from './components/NoteCard'
+import { NoteFilters } from './components/NoteFilters'
+import { TaskBulkActions } from './components/TaskBulkActions'
+import { TaskCreator } from './components/TaskCreator'
+import { TaskItem } from './components/TaskItem'
+import { TasksHeader } from './components/TasksHeader'
+import { TaskSearchBar } from './components/TaskSearchBar'
+import type { TaskPriority } from './components/TaskPriorityDot'
+
+type NoteFilter = 'All' | 'Ideas' | 'Personal'
 
 interface TaskRow {
-  id: string;
-  title: string;
-  completed: boolean;
-  created_at?: string | null;
+  id: string
+  title: string
+  completed: boolean
+  created_at?: string | null
+  updated_at?: string | null
+  due_date?: string | null
+  priority?: TaskPriority | null
+  tags?: string | null
 }
 
 interface TasksViewProps {
-  pages: Page[];
-  isAddingInline: boolean;
-  inlineValue: string;
-  inlineInputRef: RefObject<HTMLInputElement | null>;
-  onInlineChange: (value: string) => void;
-  onStartInline: () => void;
-  onCancelInline: () => void;
-  onInlineAdded?: (title: string) => void;
-  onSelectPage: (pageId: string) => void;
+  pages: Page[]
+  isAddingInline: boolean
+  inlineValue: string
+  inlineInputRef: RefObject<HTMLInputElement | null>
+  onInlineChange: (value: string) => void
+  onStartInline: () => void
+  onCancelInline: () => void
+  onInlineAdded?: (title: string) => void
+  onSelectPage: (pageId: string) => void
+}
+
+const NOTE_FILTERS: NoteFilter[] = ['All', 'Ideas', 'Personal']
+
+const formatTimestamp = (value?: string | null) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const hoursDiff = Math.abs(differenceInHours(new Date(), date))
+  if (hoursDiff < 24) {
+    return formatDistanceToNowStrict(date, { addSuffix: true })
+  }
+  return format(date, 'MMM d')
+}
+
+const formatShortDate = (value?: string | null) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return format(date, 'MMM d')
+}
+
+const parseTags = (value?: string | string[] | null) => {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value.map((tag) => tag.trim()).filter(Boolean)
+  }
+  if (typeof value !== 'string') return []
+  return value.split(',').map((tag) => tag.trim()).filter(Boolean)
+}
+
+const hasTag = (value: string | string[] | null | undefined, tag: string) => (
+  parseTags(value).includes(tag)
+)
+
+const addTag = (value: string | string[] | null | undefined, tag: string) => {
+  const tags = new Set(parseTags(value))
+  tags.add(tag)
+  return Array.from(tags).join(', ')
 }
 
 const TasksView = ({
@@ -38,194 +90,339 @@ const TasksView = ({
   onInlineAdded,
   onSelectPage
 }: TasksViewProps) => {
-  const { user, loading: authLoading } = useAuth();
-  const [tasks, setTasks] = useState<TaskRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth()
+  const [tasks, setTasks] = useState<TaskRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [noteFilter, setNoteFilter] = useState<NoteFilter>('All')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const [inlineDueDate, setInlineDueDate] = useState('')
+  const [inlinePriority, setInlinePriority] = useState<TaskPriority>('medium')
+
+  const userId = user ? ((user as { uid?: string }).uid ?? user.id) : null
+  const normalizedSearch = searchQuery.trim().toLowerCase()
 
   useEffect(() => {
-    if (!user) {
-      setTasks([]);
-      setLoading(false);
-      return;
+    if (!userId) {
+      setTasks([])
+      setLoading(false)
+      setError(null)
+      setSelectMode(false)
+      setSelectedTaskIds(new Set())
+      return
     }
 
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
+    let isMounted = true
+    setLoading(true)
+    setError(null)
 
     supabase
       .from('tasks')
-      .select('id, title, completed, created_at')
+      .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .then(({ data, error: fetchError }) => {
-        if (!isMounted) return;
+        if (!isMounted) return
         if (fetchError) {
-          setError('Failed to load tasks.');
-          setTasks([]);
+          setError('Failed to load tasks.')
+          setTasks([])
         } else {
-          setTasks((data ?? []) as TaskRow[]);
+          setTasks((data ?? []) as TaskRow[])
         }
-        setLoading(false);
-      });
+        setLoading(false)
+      })
 
     return () => {
-      isMounted = false;
-    };
-  }, [user]);
+      isMounted = false
+    }
+  }, [userId])
 
-  const remainingCount = tasks.filter((task) => !task.completed).length;
+  const matchesSearch = (value: string) => (
+    normalizedSearch.length === 0 || value.toLowerCase().includes(normalizedSearch)
+  )
 
-  const allNotes = pages.filter(page => {
-    const category = page.category?.toLowerCase();
-    return category === 'note' || page.blocks.some(block => block.type === 'text');
-  });
+  const activeTasks = tasks.filter((task) => !hasTag(task.tags ?? null, 'archived'))
+  const visibleTasks = activeTasks.filter((task) => matchesSearch(task.title))
+  const remainingCount = activeTasks.filter((task) => !task.completed).length
+
+  const allNotes = pages.filter((page) => {
+    const category = page.category?.toLowerCase()
+    return category === 'note' || page.blocks.some((block) => block.type === 'text')
+  })
+
+  const filteredNotes = allNotes.filter((note) => {
+    if (!matchesSearch(note.title)) return false
+    if (noteFilter === 'All') return true
+    const category = note.category?.toLowerCase() ?? ''
+    if (noteFilter === 'Ideas') return category.includes('idea')
+    return category.includes('personal')
+  })
+
+  const sortedNotes = [...filteredNotes].sort((first, second) => {
+    const firstPinned = (first as { isPinned?: boolean }).isPinned === true
+    const secondPinned = (second as { isPinned?: boolean }).isPinned === true
+    if (firstPinned !== secondPinned) return secondPinned ? 1 : -1
+    const firstDate = new Date(first.updatedAt ?? '')
+    const secondDate = new Date(second.updatedAt ?? '')
+    const firstTime = Number.isNaN(firstDate.getTime()) ? 0 : firstDate.getTime()
+    const secondTime = Number.isNaN(secondDate.getTime()) ? 0 : secondDate.getTime()
+    return secondTime - firstTime
+  })
+
+  const resetInlineMeta = () => {
+    setInlineDueDate('')
+    setInlinePriority('medium')
+  }
+
+  const handleStartInline = () => {
+    if (selectMode) exitSelectMode()
+    resetInlineMeta()
+    onStartInline()
+  }
 
   const handleAddInline = async () => {
-    if (!user) return;
-    const trimmed = sanitizeText(inlineValue).trim();
+    if (!userId) return
+    const trimmed = sanitizeText(inlineValue).trim()
     if (!trimmed) {
-      onCancelInline();
-      return;
+      resetInlineMeta()
+      onCancelInline()
+      return
     }
 
+    const updatedAt = new Date().toISOString()
     const { data, error: insertError } = await supabase
       .from('tasks')
-      .insert({ user_id: user.id, title: trimmed, completed: false })
-      .select('id, title, completed, created_at')
-      .single();
+      .insert({
+        user_id: userId,
+        title: trimmed,
+        completed: false,
+        tags: null,
+        due_date: inlineDueDate || null,
+        priority: inlinePriority,
+        updated_at: updatedAt
+      })
+      .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
+      .single()
 
     if (!insertError && data) {
-      setTasks((prev) => [data as TaskRow, ...prev]);
-      onInlineChange('');
-      onInlineAdded?.(trimmed);
+      setTasks((prev) => [data as TaskRow, ...prev])
+      onInlineChange('')
+      resetInlineMeta()
+      onInlineAdded?.(trimmed)
+    } else if (insertError) {
+      setError('Failed to add task.')
     }
-  };
+  }
 
   const handleToggleTask = async (task: TaskRow) => {
-    if (!user) return;
-    const nextCompleted = !task.completed;
+    if (!userId) return
+    const nextCompleted = !task.completed
+    const updatedAt = new Date().toISOString()
     const { error: updateError } = await supabase
       .from('tasks')
-      .update({ completed: nextCompleted })
-      .eq('id', task.id);
+      .update({ completed: nextCompleted, updated_at: updatedAt })
+      .eq('id', task.id)
+      .eq('user_id', userId)
 
     if (!updateError) {
       setTasks((prev) => prev.map((item) => (
-        item.id === task.id ? { ...item, completed: nextCompleted } : item
-      )));
+        item.id === task.id ? { ...item, completed: nextCompleted, updated_at: updatedAt } : item
+      )))
+    } else {
+      setError('Failed to update task.')
     }
-  };
+  }
+
+  const handleSelectTask = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(taskId)) {
+        next.delete(taskId)
+      } else {
+        next.add(taskId)
+      }
+      return next
+    })
+  }
+
+  const enterSelectMode = (taskId: string) => {
+    if (selectMode) {
+      handleSelectTask(taskId)
+      return
+    }
+    setSelectMode(true)
+    setSelectedTaskIds(new Set([taskId]))
+  }
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedTaskIds(new Set())
+  }
+
+  const selectedIds = Array.from(selectedTaskIds)
+
+  const handleBulkComplete = async () => {
+    if (!userId || selectedIds.length === 0) return
+    const updatedAt = new Date().toISOString()
+    const { error: bulkError } = await supabase
+      .from('tasks')
+      .update({ completed: true, updated_at: updatedAt })
+      .in('id', selectedIds)
+      .eq('user_id', userId)
+
+    if (bulkError) {
+      setError('Failed to complete selected tasks.')
+      return
+    }
+
+    setTasks((prev) => prev.map((task) => (
+      selectedTaskIds.has(task.id) ? { ...task, completed: true, updated_at: updatedAt } : task
+    )))
+    exitSelectMode()
+  }
+
+  const handleBulkArchive = async () => {
+    if (!userId || selectedIds.length === 0) return
+    const updatedAt = new Date().toISOString()
+    const selectedSet = new Set(selectedIds)
+    const tasksToArchive = tasks.filter((task) => selectedSet.has(task.id))
+    const updates = await Promise.all(tasksToArchive.map(async (task) => {
+      const nextTags = addTag(task.tags ?? null, 'archived')
+      const { error } = await supabase
+        .from('tasks')
+        .update({ tags: nextTags, updated_at: updatedAt })
+        .eq('id', task.id)
+        .eq('user_id', userId)
+      return { id: task.id, tags: nextTags, error }
+    }))
+
+    const failed = updates.find((update) => update.error)
+    if (failed) {
+      setError('Failed to archive selected tasks.')
+      return
+    }
+
+    const tagsById = new Map(updates.map((update) => [update.id, update.tags]))
+    setTasks((prev) => prev.map((task) => (
+      selectedTaskIds.has(task.id)
+        ? { ...task, tags: tagsById.get(task.id) ?? task.tags, updated_at: updatedAt }
+        : task
+    )))
+    exitSelectMode()
+  }
 
   return (
-    <div className="p-6 pb-32 h-full overflow-y-auto">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-black tracking-tight">To-Do</h1>
-        <div className="flex items-center gap-3">
-          <BrandLogo className="h-8 w-8" />
-          <button className="p-2 bg-gray-100 rounded-full text-gray-500">
-            <Search size={20} />
-          </button>
-        </div>
-      </div>
-      
-      <div className="space-y-3 mb-10">
-        <div className="flex items-center justify-between px-1 mb-2">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-400">Current List</h2>
-          <span className="text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">
-            {remainingCount} items
-          </span>
-        </div>
+    <div className="flex-1 overflow-y-auto pb-32">
+      <TasksHeader />
 
-        {authLoading || loading ? (
-          <div className="p-5 text-sm text-gray-400">Loading tasks...</div>
-        ) : !user ? (
-          <div className="p-5 text-sm text-gray-400">Sign in to view your tasks.</div>
-        ) : error ? (
-          <div className="p-5 text-sm text-rose-500">{error}</div>
-        ) : tasks.length === 0 ? (
-          <div className="p-5 text-sm text-gray-400">No tasks yet.</div>
-        ) : (
-          tasks.map((task) => (
-            <div 
-              key={task.id}
-              onClick={() => handleToggleTask(task)}
-              className="flex items-center p-5 bg-white rounded-2xl border border-gray-100 shadow-sm active:scale-[0.99] transition-all cursor-pointer"
-            >
-              <div className={`mr-4 ${task.completed ? 'text-green-500' : 'text-gray-300'}`}>
-                {task.completed ? <CheckCircle2 size={24} /> : <Circle size={24} />}
-              </div>
-              <span className={`text-lg font-medium ${task.completed ? 'text-gray-300 line-through' : 'text-gray-700'}`}>
-                {task.title}
-              </span>
-            </div>
-          ))
-        )}
-        
-        <div className="mt-2">
-          {isAddingInline ? (
-            <div className="flex items-center p-5 bg-white rounded-2xl border-2 border-black/10 shadow-sm animate-in fade-in zoom-in-95 duration-200">
-              <div className="mr-4 text-gray-300"><Circle size={24} /></div>
-              <input
-                ref={inlineInputRef}
-                className="flex-1 text-lg font-medium outline-none border-none p-0 focus:ring-0"
-                placeholder={user ? 'What needs to be done?' : 'Sign in to add tasks'}
-                value={inlineValue}
-                onChange={(event) => onInlineChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleAddInline();
-                  if (event.key === 'Escape') onCancelInline();
-                }}
-                onBlur={() => { if (!inlineValue.trim()) onCancelInline(); }}
-                disabled={!user}
-              />
+      <div className="px-6">
+        <div className="space-y-3 mb-10">
+          <div className="flex items-center justify-between px-1 mb-2">
+            <h2 className="text-xs font-black uppercase tracking-widest text-gray-400">Current List</h2>
+            <span className="text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">
+              {remainingCount} items
+            </span>
+          </div>
+
+          {selectMode && (
+            <TaskBulkActions
+              selectedCount={selectedTaskIds.size}
+              onComplete={handleBulkComplete}
+              onArchive={handleBulkArchive}
+              onExit={exitSelectMode}
+            />
+          )}
+
+          {authLoading || loading ? (
+            <div className="p-5 text-sm text-gray-400">Loading tasks...</div>
+          ) : !user ? (
+            <div className="p-5 text-sm text-gray-400">Sign in to view your tasks.</div>
+          ) : error ? (
+            <div className="p-5 text-sm text-rose-500">{error}</div>
+          ) : visibleTasks.length === 0 ? (
+            <div className="p-5 text-sm text-gray-400">
+              {normalizedSearch ? 'No tasks match your search.' : 'No tasks yet.'}
             </div>
           ) : (
-            <button 
-              onClick={onStartInline}
-              className="w-full flex items-center p-5 text-gray-400 hover:text-black hover:bg-gray-50 rounded-2xl border-2 border-dashed border-gray-100 transition-all active:scale-[0.99]"
-              disabled={!user}
-            >
-              <Plus size={20} className="mr-3" />
-              <span className="font-bold">Add something new to do here</span>
-            </button>
+            visibleTasks.map((task) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                timestampLabel={formatTimestamp(task.updated_at ?? task.created_at)}
+                dueDateLabel={formatShortDate(task.due_date)}
+                isSelected={selectedTaskIds.has(task.id)}
+                isSelectMode={selectMode}
+                onToggleComplete={() => handleToggleTask(task)}
+                onToggleSelect={() => handleSelectTask(task.id)}
+                onLongPress={() => enterSelectMode(task.id)}
+              />
+            ))
           )}
-        </div>
-      </div>
-
-      <div className="mt-12">
-        <div className="flex items-center justify-between px-1 mb-4">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-400">Past Notes & Brainstorms</h2>
-          <button className="text-[10px] font-bold text-gray-400">View All</button>
-        </div>
         
-        <div className="grid grid-cols-1 gap-3">
-          {allNotes.map(note => (
-            <div 
-              key={note.id}
-              onClick={() => onSelectPage(note.id)}
-              className="p-5 bg-gray-50 rounded-2xl border border-gray-100/50 hover:bg-gray-100 transition-colors cursor-pointer group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{note.icon}</span>
-                  <h3 className="font-bold text-gray-800">{note.title}</h3>
-                </div>
-                <span className="text-[10px] text-gray-400 font-medium flex items-center">
-                  <Clock size={10} className="mr-1" /> {note.updatedAt}
-                </span>
+          <div className="mt-2">
+            <TaskCreator
+              isAdding={isAddingInline}
+              value={inlineValue}
+              dueDate={inlineDueDate}
+              priority={inlinePriority}
+              inputRef={inlineInputRef}
+              onChange={onInlineChange}
+              onDueDateChange={setInlineDueDate}
+              onPriorityChange={setInlinePriority}
+              onStart={handleStartInline}
+              onCancel={() => {
+                resetInlineMeta()
+                onCancelInline()
+              }}
+              onSubmit={handleAddInline}
+              disabled={!user}
+              placeholder={user ? 'What needs to be done?' : 'Sign in to add tasks'}
+            />
+          </div>
+        </div>
+
+        <div className="mt-12">
+          <div className="flex items-center justify-between px-1 mb-4 flex-wrap gap-3">
+            <h2 className="text-xs font-black uppercase tracking-widest text-gray-400">Past Notes & Brainstorms</h2>
+            <NoteFilters filters={NOTE_FILTERS} activeFilter={noteFilter} onChange={(value) => setNoteFilter(value as NoteFilter)} />
+          </div>
+          <div className="mb-4">
+            <TaskSearchBar value={searchQuery} onChange={setSearchQuery} />
+          </div>
+        
+          <div className="grid grid-cols-1 gap-3">
+            {sortedNotes.length === 0 ? (
+              <div className="p-5 text-sm text-gray-400">
+                {normalizedSearch ? 'No notes match your search.' : 'No notes yet.'}
               </div>
-              {note.blocks.filter(block => block.type === 'text').map(block => (
-                <p key={block.id} className="text-sm text-gray-500 line-clamp-2 leading-relaxed">
-                  {block.content}
-                </p>
-              ))}
-            </div>
-          ))}
+            ) : (
+              sortedNotes.map((note) => {
+                const isPinned = (note as { isPinned?: boolean }).isPinned === true
+                const markdownContent = note.blocks
+                  .filter((block) => block.type === 'text')
+                  .map((block) => block.content)
+                  .join('\n\n')
+
+                return (
+                  <NoteCard
+                    key={note.id}
+                    title={note.title}
+                    icon={note.icon}
+                    timestamp={formatTimestamp(note.updatedAt)}
+                    content={markdownContent}
+                    isPinned={isPinned}
+                    onSelect={() => onSelectPage(note.id)}
+                  />
+                )
+              })
+            )}
+          </div>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default TasksView;
+export default TasksView
