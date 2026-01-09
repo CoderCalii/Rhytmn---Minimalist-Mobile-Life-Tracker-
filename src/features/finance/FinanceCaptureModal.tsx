@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Calendar, Check, MessageSquare, Tag, Target, Wallet, X } from 'lucide-react';
 import type { FinanceAccount, FinanceGoal } from '../../types';
@@ -7,6 +7,7 @@ import { hasSufficientBalance, validateAmount } from './utils/validateFinance';
 import { supabase } from '../../lib/supabase';
 import { createFinanceEntry } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 
 interface FinanceCaptureModalProps {
   onClose: () => void;
@@ -37,6 +38,29 @@ interface FinanceGoalRow {
   color: string | null;
 }
 
+const defaultCategorySets: Record<TransactionType, string[]> = {
+  income: ['Salary', 'Gift', 'Investment', 'Refund'],
+  expense: ['Food', 'Transport', 'Shopping', 'Bills'],
+  transfer: [],
+  goal: []
+};
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+const normalizeCategorySets = (value: unknown) => {
+  const normalized = { ...defaultCategorySets };
+  if (!value || typeof value !== 'object') return normalized;
+  const record = value as Record<string, unknown>;
+  (Object.keys(defaultCategorySets) as TransactionType[]).forEach((key) => {
+    const entry = record[key];
+    if (isStringArray(entry)) {
+      normalized[key] = entry;
+    }
+  });
+  return normalized;
+};
+
 const FinanceCaptureModal = ({
   onClose,
   onSaved,
@@ -52,12 +76,16 @@ const FinanceCaptureModal = ({
   const toastTimeoutRef = useRef<number | null>(null);
   const closeTimeoutRef = useRef<number | null>(null);
   const [amount, setAmount] = useState<number | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const [type, setType] = useState<TransactionType>('expense');
   const [goalFlow, setGoalFlow] = useState<GoalFlow>('contribution');
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialGoalId);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedDestinationAccountId, setSelectedDestinationAccountId] = useState<string | null>(null);
   const [category, setCategory] = useState('');
+  const [categorySets, setCategorySets] = useLocalStorage('finance.categorySets.v1', defaultCategorySets);
+  const [isEditingCategories, setIsEditingCategories] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -74,15 +102,16 @@ const FinanceCaptureModal = ({
     label: string;
     icon: ReactNode;
     color: string;
-    categories: string[];
   }> = [
-    { id: 'income', label: 'Income', icon: <ArrowDownLeft size={14} />, color: 'text-emerald-500', categories: ['Salary', 'Gift', 'Investment', 'Refund'] },
-    { id: 'expense', label: 'Expense', icon: <ArrowUpRight size={14} />, color: 'text-rose-500', categories: ['Food', 'Transport', 'Shopping', 'Bills'] },
-    { id: 'transfer', label: 'Transfer', icon: <ArrowLeftRight size={14} />, color: 'text-blue-600', categories: [] },
-    { id: 'goal', label: 'Goal', icon: <Target size={14} />, color: 'text-purple-600', categories: [] },
+    { id: 'income', label: 'Income', icon: <ArrowDownLeft size={14} />, color: 'text-emerald-500' },
+    { id: 'expense', label: 'Expense', icon: <ArrowUpRight size={14} />, color: 'text-rose-500' },
+    { id: 'transfer', label: 'Transfer', icon: <ArrowLeftRight size={14} />, color: 'text-blue-600' },
+    { id: 'goal', label: 'Goal', icon: <Target size={14} />, color: 'text-purple-600' },
   ];
 
   const currentTypeData = transactionTypes.find(t => t.id === type) ?? transactionTypes[0];
+  const safeCategorySets = useMemo(() => normalizeCategorySets(categorySets), [categorySets]);
+  const categoriesForType = safeCategorySets[type] ?? [];
   const transferAmount = amount === null ? 0 : Math.abs(amount);
   const goalSelectedAccount = selectedAccountId
     ? accounts.find((account) => account.id === selectedAccountId) ?? null
@@ -113,6 +142,13 @@ const FinanceCaptureModal = ({
       if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
       if (closeTimeoutRef.current) window.clearTimeout(closeTimeoutRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -215,6 +251,46 @@ const FinanceCaptureModal = ({
       setSelectedGoal(initialGoalId ?? goals[0].id);
     }
   }, [goals, selectedGoal, initialGoalId]);
+
+  useEffect(() => {
+    if (type === 'transfer' || type === 'goal') {
+      setIsEditingCategories(false);
+      setNewCategory('');
+    }
+  }, [type]);
+
+  const addCategoryTag = () => {
+    if (type === 'transfer' || type === 'goal') return;
+    const trimmed = sanitizeText(newCategory).trim();
+    if (!trimmed) return;
+
+    setCategorySets((prev) => {
+      const normalized = normalizeCategorySets(prev);
+      const existing = normalized[type] ?? [];
+      const matched = existing.find((item) => item.toLowerCase() === trimmed.toLowerCase());
+      if (matched) {
+        setCategory(matched);
+        return normalized;
+      }
+      return { ...normalized, [type]: [...existing, trimmed] };
+    });
+
+    setCategory(trimmed);
+    setNewCategory('');
+  };
+
+  const removeCategoryTag = (tag: string) => {
+    if (type === 'transfer' || type === 'goal') return;
+    setCategorySets((prev) => {
+      const normalized = normalizeCategorySets(prev);
+      const existing = normalized[type] ?? [];
+      const next = existing.filter((item) => item.toLowerCase() !== tag.toLowerCase());
+      return { ...normalized, [type]: next };
+    });
+    if (category.toLowerCase() === tag.toLowerCase()) {
+      setCategory('');
+    }
+  };
 
   const handleConfirm = async () => {
     if (!user) {
@@ -401,7 +477,10 @@ const FinanceCaptureModal = ({
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full">
               <Calendar size={12} className="text-slate-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 font-mono">Today, 12:45 PM</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 font-mono">
+                {now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })},{' '}
+                {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              </span>
             </div>
             <button onClick={onClose} className="p-2.5 bg-slate-50 rounded-full text-slate-400 hover:bg-slate-100 transition-colors">
               <X size={18} />
@@ -484,24 +563,92 @@ const FinanceCaptureModal = ({
               </div>
             ) : type !== 'goal' ? (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                <p className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em] flex items-center gap-2">
-                  <Tag size={10} /> Category
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {currentTypeData.categories.map(cat => (
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Tag size={10} /> Category
+                  </p>
+                  {(type === 'income' || type === 'expense') && (
                     <button
-                      key={cat}
-                      onClick={() => setCategory(sanitizeText(cat))}
-                      className={`px-4 py-2 rounded-2xl text-[10px] font-bold transition-all ${
-                        category === cat 
-                          ? 'bg-slate-900 text-white shadow-md' 
-                          : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
-                      }`}
+                      type="button"
+                      onClick={() => setIsEditingCategories((prev) => !prev)}
+                      className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] hover:text-slate-500"
                     >
-                      {cat}
+                      {isEditingCategories ? 'Done' : 'Edit'}
                     </button>
-                  ))}
+                  )}
                 </div>
+                <div className="flex flex-wrap gap-2">
+                  {categoriesForType.map((cat) => (
+                    isEditingCategories ? (
+                      <div
+                        key={cat}
+                        className={`flex items-center gap-2 rounded-2xl px-3 py-2 ${
+                          category.toLowerCase() === cat.toLowerCase()
+                            ? 'bg-slate-900 text-white shadow-md'
+                            : 'bg-slate-50 text-slate-400'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setCategory(cat)}
+                          className="text-[10px] font-bold"
+                        >
+                          {cat}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeCategoryTag(cat)}
+                          className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                            category.toLowerCase() === cat.toLowerCase()
+                              ? 'bg-white/20 text-white'
+                              : 'bg-white text-slate-400'
+                          }`}
+                          aria-label={`Remove ${cat}`}
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        key={cat}
+                        onClick={() => setCategory(cat)}
+                        className={`px-4 py-2 rounded-2xl text-[10px] font-bold transition-all ${
+                          category === cat 
+                            ? 'bg-slate-900 text-white shadow-md' 
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    )
+                  ))}
+                  {!isEditingCategories && categoriesForType.length === 0 && (
+                    <span className="text-[10px] font-bold text-slate-400">No categories yet.</span>
+                  )}
+                </div>
+                {isEditingCategories && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      placeholder="Add category"
+                      value={newCategory}
+                      onChange={(event) => setNewCategory(sanitizeText(event.target.value))}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addCategoryTag();
+                        }
+                      }}
+                      className="flex-1 rounded-2xl bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700 outline-none placeholder:text-slate-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCategoryTag}
+                      className="rounded-2xl bg-black px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white"
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
               </div>
             ) : null}
 

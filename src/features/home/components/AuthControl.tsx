@@ -3,7 +3,11 @@ import { LogOut } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
-const AuthControl = () => {
+interface AuthControlProps {
+  onOpenSettings?: () => void;
+}
+
+const AuthControl = ({ onOpenSettings }: AuthControlProps) => {
   const { user, loading } = useAuth();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'sign_in' | 'sign_up'>('sign_in');
@@ -64,6 +68,17 @@ const AuthControl = () => {
               <p className="text-[10px] font-bold text-gray-500 mb-3 truncate">
                 {user.email}
               </p>
+              {onOpenSettings && (
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenSettings();
+                  }}
+                  className="mb-2 w-full rounded-xl border border-gray-100 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 hover:text-black"
+                >
+                  Settings
+                </button>
+              )}
               <button
                 onClick={handleSignOut}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-black py-2 text-[10px] font-bold uppercase tracking-widest text-white"

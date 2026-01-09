@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Pencil, Wallet } from 'lucide-react';
 import type { FinanceAccount } from '../../../types';
+import { formatCurrency } from '../../../utils/formatters';
 
 type AccountCardProps = {
   account: FinanceAccount;
@@ -8,9 +9,17 @@ type AccountCardProps = {
   style?: CSSProperties;
   isActive?: boolean;
   onEdit?: (account: FinanceAccount) => void;
+  currencyCode?: 'USD' | 'PHP';
 };
 
-export function AccountCard({ account, textClassName, style, isActive = false, onEdit }: AccountCardProps) {
+export function AccountCard({
+  account,
+  textClassName,
+  style,
+  isActive = false,
+  onEdit,
+  currencyCode = 'USD'
+}: AccountCardProps) {
   return (
     <div
       style={style}
@@ -20,7 +29,7 @@ export function AccountCard({ account, textClassName, style, isActive = false, o
         <div>
           <p className="text-[10px] opacity-60 font-black uppercase tracking-[0.2em]">{account.name}</p>
           <h2 className="text-3xl font-black mt-2 tracking-tighter">
-            ${account.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            {formatCurrency(account.balance, currencyCode)}
           </h2>
         </div>
         <div className="flex items-center gap-2">

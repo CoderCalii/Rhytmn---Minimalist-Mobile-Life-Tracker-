@@ -11,9 +11,12 @@ import FinanceCaptureModal from './features/finance/FinanceCaptureModal';
 import HabitCaptureModal from './features/habits/HabitCaptureModal';
 import FinanceView from './features/finance/FinanceView';
 import HabitsView from './features/habits/HabitsView';
-import HomeView from './features/home/HomeView';
+import HomeView from './features/home/view/HomeView';
 import PageDetailView from './features/page_detail/PageDetailView';
+import SettingsView from './features/settings/SettingsView';
 import TasksView from './features/tasks/views/TasksView';
+import { supabase } from './lib/supabase';
+import { useAuth } from './hooks/useAuth';
 import { INITIAL_PAGES } from './mockData';
 import type { Block, Page } from './types';
 import { getTodoCompleted } from './utils/todo';
@@ -21,21 +24,24 @@ import { sanitizeText } from './utils/sanitize';
 
 // --- Types ---
 
-type ViewState = 'home' | 'tasks' | 'habits' | 'finance' | 'page_detail';
+type ViewState = 'home' | 'tasks' | 'habits' | 'finance' | 'page_detail' | 'settings';
+type CurrencyCode = 'USD' | 'PHP';
 
 // --- Main App ---
 
 export default function App() {
+  const { user } = useAuth();
   const [view, setView] = useState<ViewState>('home');
   const [pages, setPages] = useState<Page[]>(INITIAL_PAGES);
-  const [zapInput, setZapInput] = useState('');
-  const [activePageId, setActivePageId] = useState<string | null>(null);
+  const [activePageId] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
   const [showHabitCapture, setShowHabitCapture] = useState(false);
   const [showFinanceCapture, setShowFinanceCapture] = useState(false);
   const [financeInitialGoalId, setFinanceInitialGoalId] = useState<string | null>(null);
   const [habitsRefreshToken, setHabitsRefreshToken] = useState(0);
   const [financeRefreshToken, setFinanceRefreshToken] = useState(0);
+  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>('USD');
+  const [currencyLoaded, setCurrencyLoaded] = useState(false);
 
   const [isAddingInline, setIsAddingInline] = useState(false);
   const [inlineValue, setInlineValue] = useState('');
@@ -46,6 +52,43 @@ export default function App() {
       inlineInputRef.current.focus();
     }
   }, [isAddingInline]);
+
+  useEffect(() => {
+    if (!user) {
+      setCurrencyCode('USD');
+      setCurrencyLoaded(false);
+      return;
+    }
+
+    let isMounted = true;
+    setCurrencyLoaded(false);
+
+    supabase
+      .from('user_settings')
+      .select('currency_code')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!isMounted) return;
+        if (error) {
+          setCurrencyCode('USD');
+        } else {
+          setCurrencyCode(data?.currency_code === 'PHP' ? 'PHP' : 'USD');
+        }
+        setCurrencyLoaded(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !currencyLoaded) return;
+    supabase
+      .from('user_settings')
+      .upsert({ user_id: user.id, currency_code: currencyCode }, { onConflict: 'user_id' });
+  }, [user, currencyCode, currencyLoaded]);
 
   
   const activePage = activePageId ? pages.find(p => p.id === activePageId) : null;
@@ -124,27 +167,20 @@ export default function App() {
     else setShowCapture(true);
   };
 
-  const handleZapCapture = () => {
-    const trimmed = sanitizeText(zapInput).trim();
-    if (!trimmed) return;
-    const newPage: Page = {
-      id: Date.now().toString(),
-      title: trimmed,
-      icon: 'âš¡',
-      category: 'unprocessed',
-      updatedAt: 'Just now',
-      blocks: [
-        { id: 'b-title', type: 'heading', content: trimmed },
-        { id: 'b-text', type: 'text', content: '' }
-      ]
-    };
-    setPages(prev => [newPage, ...prev]);
-    setZapInput('');
+  const handleGoTasks = () => {
+    setView('tasks');
   };
 
-  const handleSelectPage = (pageId: string) => {
-    setActivePageId(pageId);
-    setView('page_detail');
+  const handleGoHabits = () => {
+    setView('habits');
+  };
+
+  const handleGoAlerts = () => {
+    setView('tasks');
+  };
+
+  const handleOpenSettings = () => {
+    setView('settings');
   };
 
   const renderContent = () => {
@@ -158,21 +194,19 @@ export default function App() {
           />
         ) : (
           <HomeView
-            pages={pages}
-            zapInput={zapInput}
-            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
-            onZapSubmit={handleZapCapture}
-            onSelectPage={handleSelectPage}
+            onGoTasks={handleGoTasks}
+            onGoHabits={handleGoHabits}
+            onGoAlerts={handleGoAlerts}
+            onOpenSettings={handleOpenSettings}
           />
         );
       case 'home':
         return (
           <HomeView
-            pages={pages}
-            zapInput={zapInput}
-            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
-            onZapSubmit={handleZapCapture}
-            onSelectPage={handleSelectPage}
+            onGoTasks={handleGoTasks}
+            onGoHabits={handleGoHabits}
+            onGoAlerts={handleGoAlerts}
+            onOpenSettings={handleOpenSettings}
           />
         );
       case 'tasks':
@@ -196,16 +230,24 @@ export default function App() {
         return (
           <FinanceView
             refreshToken={financeRefreshToken}
+            currencyCode={currencyCode}
+          />
+        );
+      case 'settings':
+        return (
+          <SettingsView
+            currencyCode={currencyCode}
+            onCurrencyChange={setCurrencyCode}
+            onBack={() => setView('home')}
           />
         );
       default:
         return (
           <HomeView
-            pages={pages}
-            zapInput={zapInput}
-            onZapInputChange={(value) => setZapInput(sanitizeText(value))}
-            onZapSubmit={handleZapCapture}
-            onSelectPage={handleSelectPage}
+            onGoTasks={handleGoTasks}
+            onGoHabits={handleGoHabits}
+            onGoAlerts={handleGoAlerts}
+            onOpenSettings={handleOpenSettings}
           />
         );
     }
@@ -219,7 +261,7 @@ export default function App() {
         
         {renderContent()}
 
-        {view !== 'page_detail' && (
+        {view !== 'page_detail' && view !== 'home' && view !== 'settings' && (
           <>
             <button 
               onClick={handleMainPlusClick}
@@ -227,15 +269,17 @@ export default function App() {
             >
               <Plus size={32} strokeWidth={2.5} />
             </button>
-
-            <div className="absolute bottom-6 left-6 right-6 h-16 bg-white border border-gray-100 rounded-full shadow-lg flex items-center justify-around px-4 z-[90]">
-              <button onClick={() => setView('home')} className={view === 'home' ? 'text-black' : 'text-gray-300'}><Home size={24} /></button>
-              <button onClick={() => setView('tasks')} className={view === 'tasks' ? 'text-black' : 'text-gray-300'}><CheckSquare size={24} /></button>
-              <div className="w-12" />
-              <button onClick={() => setView('habits')} className={view === 'habits' ? 'text-black' : 'text-gray-300'}><Activity size={24} /></button>
-              <button onClick={() => setView('finance')} className={view === 'finance' ? 'text-black' : 'text-gray-300'}><CreditCard size={24} /></button>
-            </div>
           </>
+        )}
+
+        {view !== 'page_detail' && (
+          <div className="absolute bottom-6 left-6 right-6 h-16 bg-white border border-gray-100 rounded-full shadow-lg flex items-center justify-around px-4 z-[90]">
+            <button onClick={() => setView('home')} className={view === 'home' || view === 'settings' ? 'text-black' : 'text-gray-300'}><Home size={24} /></button>
+            <button onClick={() => setView('tasks')} className={view === 'tasks' ? 'text-black' : 'text-gray-300'}><CheckSquare size={24} /></button>
+            <div className="w-12" />
+            <button onClick={() => setView('habits')} className={view === 'habits' ? 'text-black' : 'text-gray-300'}><Activity size={24} /></button>
+            <button onClick={() => setView('finance')} className={view === 'finance' ? 'text-black' : 'text-gray-300'}><CreditCard size={24} /></button>
+          </div>
         )}
 
         {showCapture && <CaptureModal onClose={() => setShowCapture(false)} onSave={handleQuickNote} />}
@@ -249,6 +293,7 @@ export default function App() {
           <FinanceCaptureModal
             onClose={() => setShowFinanceCapture(false)}
             initialGoalId={financeInitialGoalId}
+            currencyCode={currencyCode}
             onSaved={() => setFinanceRefreshToken((token) => token + 1)}
           />
         )}
