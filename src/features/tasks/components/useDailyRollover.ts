@@ -189,7 +189,8 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
         let stored = localStorage.getItem(storageKey)
         if (!stored) {
           const { latestKey, hasUndatedTasks } = findTaskBacklogKey(tasks, todayKey)
-          let backlogKey = latestKey
+          let backlogKey: string | null = latestKey
+
           if (!backlogKey && hasUndatedTasks) {
             backlogKey = toLocalDateKey(addDays(new Date(`${todayKey}T00:00:00`), -1))
           }
@@ -197,7 +198,7 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
             backlogKey = await findNotesBacklogKey(userId, todayKey)
           }
           if (!backlogKey) {
-            // Explicit clean slate: no backlog tasks or past notes to close.
+            
             localStorage.setItem(storageKey, todayKey)
             return
           }
