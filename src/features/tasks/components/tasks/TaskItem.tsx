@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { TaskPriorityDot, type TaskPriority } from './TaskPriorityDot'
 
@@ -34,7 +34,15 @@ export function TaskItem({
   const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggeredRef = useRef(false)
 
+  const clearLongPress = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
+    }
+  }, [])
+
   const handlePointerDown = () => {
+    clearLongPress()
     longPressTriggeredRef.current = false
     longPressTimeoutRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true
@@ -42,12 +50,12 @@ export function TaskItem({
     }, 450)
   }
 
-  const clearLongPress = () => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current)
-      longPressTimeoutRef.current = null
+  useEffect(() => {
+    clearLongPress()
+    return () => {
+      clearLongPress()
     }
-  }
+  }, [clearLongPress, isSelectMode, isSelected])
 
   const handleClick = () => {
     if (longPressTriggeredRef.current) {

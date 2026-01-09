@@ -6,14 +6,14 @@ import {
   Home, 
   Plus
 } from 'lucide-react';
-import CaptureModal from './features/tasks/CaptureModal';
+import CaptureModal from './features/tasks/components/CaptureModal';
 import FinanceCaptureModal from './features/finance/FinanceCaptureModal';
 import HabitCaptureModal from './features/habits/HabitCaptureModal';
 import FinanceView from './features/finance/FinanceView';
 import HabitsView from './features/habits/HabitsView';
 import HomeView from './features/home/HomeView';
 import PageDetailView from './features/page_detail/PageDetailView';
-import TasksView from './features/tasks/TasksView';
+import TasksView from './features/tasks/views/TasksView';
 import { INITIAL_PAGES } from './mockData';
 import type { Block, Page } from './types';
 import { getTodoCompleted } from './utils/todo';
@@ -178,7 +178,6 @@ export default function App() {
       case 'tasks':
         return (
           <TasksView
-            pages={pages}
             isAddingInline={isAddingInline}
             inlineValue={inlineValue}
             inlineInputRef={inlineInputRef}
@@ -189,7 +188,6 @@ export default function App() {
               setInlineValue('');
             }}
             onInlineAdded={handleInlineTaskFile}
-            onSelectPage={handleSelectPage}
           />
         );
       case 'habits':

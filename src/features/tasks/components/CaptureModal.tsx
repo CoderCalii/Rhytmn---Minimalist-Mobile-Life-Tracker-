@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FileText, Tag, X } from 'lucide-react';
-import { sanitizeText } from '../../utils/sanitize';
+import { sanitizeText } from '../../../utils/sanitize';
 
 interface CaptureModalProps {
   onClose: () => void;
