@@ -38,6 +38,12 @@ export default function App() {
   const [showHabitCapture, setShowHabitCapture] = useState(false);
   const [showFinanceCapture, setShowFinanceCapture] = useState(false);
   const [financeInitialGoalId, setFinanceInitialGoalId] = useState<string | null>(null);
+  const [financeCaptureType, setFinanceCaptureType] = useState<'income' | 'expense' | 'transfer' | 'goal' | null>(null);
+  const [financeFabIntent, setFinanceFabIntent] = useState<{ type: 'subscription' } | null>(null);
+  const [financeFabContext, setFinanceFabContext] = useState<'portfolio' | 'activity' | 'subscriptions'>('portfolio');
+  const [showFabActions, setShowFabActions] = useState(false);
+  const fabPressTimeoutRef = useRef<number | null>(null);
+  const fabLongPressTriggeredRef = useRef(false);
   const [habitsRefreshToken, setHabitsRefreshToken] = useState(0);
   const [financeRefreshToken, setFinanceRefreshToken] = useState(0);
   const [currencyCode, setCurrencyCode] = useState<CurrencyCode>('USD');
@@ -155,17 +161,68 @@ export default function App() {
     }));
   };
 
-  const openFinanceAdd = (goalId?: string) => {
-    setFinanceInitialGoalId(goalId || null);
+  const openFinanceAdd = (options?: { goalId?: string; type?: 'income' | 'expense' | 'transfer' | 'goal' }) => {
+    setFinanceInitialGoalId(options?.goalId ?? null);
+    setFinanceCaptureType(options?.type ?? null);
     setShowFinanceCapture(true);
   };
 
   const handleMainPlusClick = () => {
-    if (view === 'finance') openFinanceAdd();
-    else if (view === 'habits') setShowHabitCapture(true);
-    else if (view === 'tasks') setIsAddingInline(true);
-    else setShowCapture(true);
+    if (view === 'finance') {
+      if (financeFabContext === 'subscriptions') {
+        setFinanceFabIntent({ type: 'subscription' });
+        return;
+      }
+      const initialType = financeFabContext === 'activity' ? 'expense' : undefined;
+      openFinanceAdd({ type: initialType });
+      return;
+    }
+    if (view === 'habits') {
+      setShowHabitCapture(true);
+      return;
+    }
+    if (view === 'tasks') {
+      setIsAddingInline(true);
+      return;
+    }
+    setShowCapture(true);
   };
+
+  const handleFabPointerDown = () => {
+    if (fabPressTimeoutRef.current) {
+      window.clearTimeout(fabPressTimeoutRef.current);
+    }
+    fabLongPressTriggeredRef.current = false;
+    if (view !== 'finance') return;
+    fabPressTimeoutRef.current = window.setTimeout(() => {
+      fabLongPressTriggeredRef.current = true;
+      setShowFabActions(true);
+    }, 420);
+  };
+
+  const handleFabPointerUp = () => {
+    if (fabPressTimeoutRef.current) {
+      window.clearTimeout(fabPressTimeoutRef.current);
+    }
+  };
+
+  const handleFabPointerLeave = () => {
+    if (fabPressTimeoutRef.current) {
+      window.clearTimeout(fabPressTimeoutRef.current);
+    }
+  };
+
+  const handleFabClick = () => {
+    if (fabLongPressTriggeredRef.current) {
+      fabLongPressTriggeredRef.current = false;
+      return;
+    }
+    handleMainPlusClick();
+  };
+
+  useEffect(() => {
+    setShowFabActions(false);
+  }, [view]);
 
   const handleGoTasks = () => {
     setView('tasks');
@@ -231,6 +288,9 @@ export default function App() {
           <FinanceView
             refreshToken={financeRefreshToken}
             currencyCode={currencyCode}
+            fabIntent={financeFabIntent}
+            onFabIntentHandled={() => setFinanceFabIntent(null)}
+            onFabContextChange={setFinanceFabContext}
           />
         );
       case 'settings':
@@ -264,11 +324,55 @@ export default function App() {
         {view !== 'page_detail' && view !== 'home' && view !== 'settings' && (
           <>
             <button 
-              onClick={handleMainPlusClick}
+              onPointerDown={handleFabPointerDown}
+              onPointerUp={handleFabPointerUp}
+              onPointerLeave={handleFabPointerLeave}
+              onPointerCancel={handleFabPointerLeave}
+              onClick={handleFabClick}
               className="absolute bottom-24 left-1/2 -translate-x-1/2 w-16 h-16 bg-black text-white rounded-full flex items-center justify-center shadow-xl z-[100] active:scale-95 transition-transform"
             >
               <Plus size={32} strokeWidth={2.5} />
             </button>
+            {showFabActions && view === 'finance' && (
+              <div className="absolute inset-0 z-[105]">
+                <div
+                  className="absolute inset-0"
+                  onClick={() => setShowFabActions(false)}
+                />
+                <div className="absolute bottom-40 left-1/2 w-48 -translate-x-1/2 rounded-[2rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFabActions(false);
+                      openFinanceAdd({ type: 'income' });
+                    }}
+                    className="w-full rounded-2xl px-3 py-2 text-left text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                  >
+                    Add income
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFabActions(false);
+                      openFinanceAdd({ type: 'transfer' });
+                    }}
+                    className="w-full rounded-2xl px-3 py-2 text-left text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                  >
+                    Add transfer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFabActions(false);
+                      openFinanceAdd({ type: 'goal' });
+                    }}
+                    className="w-full rounded-2xl px-3 py-2 text-left text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+                  >
+                    Add goal
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -291,10 +395,17 @@ export default function App() {
         )}
         {showFinanceCapture && (
           <FinanceCaptureModal
-            onClose={() => setShowFinanceCapture(false)}
+            onClose={() => {
+              setShowFinanceCapture(false);
+              setFinanceCaptureType(null);
+            }}
             initialGoalId={financeInitialGoalId}
+            initialType={financeCaptureType}
             currencyCode={currencyCode}
-            onSaved={() => setFinanceRefreshToken((token) => token + 1)}
+            onSaved={() => {
+              setFinanceRefreshToken((token) => token + 1);
+              setFinanceCaptureType(null);
+            }}
           />
         )}
         

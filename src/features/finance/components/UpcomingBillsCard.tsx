@@ -11,6 +11,8 @@ interface UpcomingBillsCardProps {
   isSignedIn: boolean;
   error?: string | null;
   onClick?: () => void;
+  rangeLabel?: string;
+  insight?: string | null;
 }
 
 const formatCurrency = (value: number, currencyCode: 'USD' | 'PHP') => (
@@ -27,14 +29,16 @@ const UpcomingBillsCard = ({
   loading,
   isSignedIn,
   error,
-  onClick
+  onClick,
+  rangeLabel = 'This period',
+  insight
 }: UpcomingBillsCardProps) => {
   const isInteractive = Boolean(onClick);
 
   return (
     <div
       className={`rounded-3xl border border-rose-200/70 bg-white/90 p-5 shadow-[0_12px_32px_-24px_rgba(244,63,94,0.35)] backdrop-blur ${
-        isInteractive ? 'cursor-pointer transition hover:border-rose-300 hover:shadow-md' : ''
+        isInteractive ? 'cursor-pointer transition hover:border-rose-300 hover:shadow-md active:scale-[0.99] active:shadow-lg' : ''
       }`}
       onClick={onClick}
       role={isInteractive ? 'button' : undefined}
@@ -48,10 +52,10 @@ const UpcomingBillsCard = ({
       }}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Upcoming Bills</p>
+        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Upcoming Bills</p>
         {!loading && !error && isSignedIn && (
           <span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-slate-500">
-            {bills.length} due
+            {bills.length} due {rangeLabel}
           </span>
         )}
       </div>
@@ -78,6 +82,7 @@ const UpcomingBillsCard = ({
               <span className="font-semibold text-slate-900">{formatCurrency(bill.amount, currencyCode)}</span>
             </div>
           ))}
+          {insight && <p className="pt-1 text-xs text-slate-500">{insight}</p>}
         </div>
       )}
     </div>

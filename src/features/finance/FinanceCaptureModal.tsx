@@ -15,6 +15,7 @@ interface FinanceCaptureModalProps {
   accounts?: FinanceAccount[];
   goals?: FinanceGoal[];
   initialGoalId?: string | null;
+  initialType?: 'income' | 'expense' | 'goal' | 'transfer' | null;
   currencySymbol?: '$' | '₱';
   currencyCode?: 'USD' | 'PHP';
 }
@@ -67,6 +68,7 @@ const FinanceCaptureModal = ({
   accounts: accountsProp,
   goals: goalsProp,
   initialGoalId = null,
+  initialType = null,
   currencySymbol,
   currencyCode
 }: FinanceCaptureModalProps) => {
@@ -77,7 +79,7 @@ const FinanceCaptureModal = ({
   const closeTimeoutRef = useRef<number | null>(null);
   const [amount, setAmount] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
-  const [type, setType] = useState<TransactionType>('expense');
+  const [type, setType] = useState<TransactionType>(initialType ?? 'expense');
   const [goalFlow, setGoalFlow] = useState<GoalFlow>('contribution');
   const [selectedGoal, setSelectedGoal] = useState<string | null>(initialGoalId);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -258,6 +260,12 @@ const FinanceCaptureModal = ({
       setNewCategory('');
     }
   }, [type]);
+
+  useEffect(() => {
+    if (initialType) {
+      setType(initialType);
+    }
+  }, [initialType]);
 
   const addCategoryTag = () => {
     if (type === 'transfer' || type === 'goal') return;
