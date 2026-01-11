@@ -3,28 +3,9 @@ import { X } from 'lucide-react';
 import type { FinanceAccount } from '../../../types';
 import { sanitizeText } from '../../../utils/sanitize';
 import { validateAmount } from '../utils/validateFinance';
+import type { RecurrenceCadence, SubscriptionFormInput, SubscriptionItem } from '../types';
 
-type RecurrenceCadence = 'weekly' | 'monthly' | 'yearly';
-
-export interface SubscriptionItem {
-  id: string;
-  name: string;
-  amount: number;
-  cadence: RecurrenceCadence;
-  nextDueDate: string | null;
-  accountId: string | null;
-  reminderDays: number | null;
-  active: boolean;
-}
-
-export interface SubscriptionFormInput {
-  name: string;
-  amount: number;
-  cadence: RecurrenceCadence;
-  nextDueDate: string;
-  accountId: string | null;
-  reminderDays: number | null;
-}
+export type { SubscriptionFormInput, SubscriptionItem } from '../types';
 
 interface SubscriptionsManagerModalProps {
   isOpen: boolean;

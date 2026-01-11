@@ -3,28 +3,9 @@ import { X } from 'lucide-react';
 import type { FinanceAccount } from '../../../types';
 import { sanitizeText } from '../../../utils/sanitize';
 import { validateAmount } from '../utils/validateFinance';
+import type { BillFormInput, BillItem, RecurrenceCadence } from '../types';
 
-type RecurrenceCadence = 'weekly' | 'monthly' | 'yearly';
-
-export interface BillItem {
-  id: string;
-  name: string;
-  amount: number;
-  cadence: RecurrenceCadence;
-  nextDueDate: string | null;
-  accountId: string | null;
-  reminderDays: number | null;
-  active: boolean;
-}
-
-export interface BillFormInput {
-  name: string;
-  amount: number;
-  cadence: RecurrenceCadence;
-  nextDueDate: string;
-  accountId: string | null;
-  reminderDays: number | null;
-}
+export type { BillFormInput, BillItem } from '../types';
 
 interface BillsManagerModalProps {
   isOpen: boolean;
