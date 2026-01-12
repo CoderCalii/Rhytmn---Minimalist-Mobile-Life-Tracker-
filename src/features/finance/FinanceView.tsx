@@ -123,6 +123,7 @@ const FinanceView = ({
     categoryTrends,
     upcomingBillsRange,
     upcomingBills,
+    upcomingBillsMonthTotal,
     upcomingBillsInsight,
     activityRange,
     filteredTransactions,
@@ -425,13 +426,13 @@ const FinanceView = ({
     ? dashboardConfig.pinned.includes(actionMenuCardId)
     : false;
 
-  const themeStyle: CSSProperties = {
+  const themeStyle = {
     '--finance-sand': '#fbf8f3',
     '--finance-ink': '#0f172a',
     '--finance-glow': '#fbe5cf',
     '--finance-mint': '#b9f5d8',
     '--finance-sky': '#cfe9ff'
-  };
+  } as CSSProperties;
 
   return (
     <div
@@ -518,6 +519,7 @@ const FinanceView = ({
                     onClick={() => setShowBillsModal(true)}
                     rangeLabel={getRangeBadge(upcomingBillsRange)}
                     insight={upcomingBillsInsight}
+                    monthTotal={upcomingBillsMonthTotal}
                   />
                 </DashboardCardShell>
               );

@@ -1,0 +1,216 @@
+D:\mobile habit track
++---.env
++---.gitignore
++---deno.json
++---eslint.config.js
++---index.html
++---LICENSE
++---package.json
++---package-lock.json
++---postcss.config.js
++---README.md
++---tailwind.config.js
++---tree.txt
++---tsconfig.app.json
++---tsconfig.json
++---tsconfig.node.json
++---tsconfig.tsbuildinfo
++---vite.config.ts
++---backend
++---documentation
+|   +---backend_phase1.txt
+|   \\---frontend_phase1.txt
++---mobile
+|   +---.gitignore
+|   +---app.json
+|   +---App.tsx
+|   +---babel.config.js
+|   +---index.ts
+|   +---nativewind.d.ts
+|   +---package.json
+|   +---package-lock.json
+|   +---tailwind.config.js
+|   +---tsconfig.json
+|   +---.expo
+|   |   +---devices.json
+|   |   +---README.md
+|   |   \\---web
+|   |       \\---cache
+|   |           \\---production
+|   |               \\---images
+|   |                   \\---favicon
+|   |                       \\---favicon-24272cdaeff82cc5facdaccd982a6f05b60c4504704bbf94c19a6388659880bb-contain-transparent
+|   |                           \\---favicon-48.png
+|   \\---assets
+|       +---adaptive-icon.png
+|       +---favicon.png
+|       +---icon.png
+|       \\---splash-icon.png
++---public
+|   \\---vite.svg
++---src
+|   +---App.tsx
+|   +---index.css
+|   +---main.tsx
+|   +---mockData.ts
+|   +---types.ts
+|   +---assets
+|   |   +---react.svg
+|   |   +---features
+|   |   \\---logos
+|   |       +---R_black in white.png
+|   |       +---R_white in blac.png
+|   |       +---rhytmn_in black bg.png
+|   |       \\---ryhthm_in white bg.png
+|   +---components
+|   |   +---AppHeader.tsx
+|   |   +---BrandLogo.tsx
+|   |   +---layout
+|   |   |   +---DeviceShell.tsx
+|   |   |   +---Header.tsx
+|   |   |   \\---Navigation.tsx
+|   |   \\---ui
+|   |       +---Button.tsx
+|   |       +---Card.tsx
+|   |       +---Input.tsx
+|   |       \\---Modal.tsx
+|   +---features
+|   |   +---finance
+|   |   |   +---constants.ts
+|   |   |   +---FinanceCaptureModal.tsx
+|   |   |   +---FinanceView.tsx
+|   |   |   +---types.ts
+|   |   |   +---components
+|   |   |   |   +---AccountCard.tsx
+|   |   |   |   +---AnimatedNumber.tsx
+|   |   |   |   +---BillsManagerModal.tsx
+|   |   |   |   +---BottomSheet.tsx
+|   |   |   |   +---DashboardCardShell.tsx
+|   |   |   |   +---FinanceHeader.tsx
+|   |   |   |   +---GoalTracker.tsx
+|   |   |   |   +---SubscriptionsManagerModal.tsx
+|   |   |   |   +---SubscriptionsSummary.tsx
+|   |   |   |   +---SwipeableActivityRow.tsx
+|   |   |   |   +---ThisWeekSummary.tsx
+|   |   |   |   +---TopCategoriesSummary.tsx
+|   |   |   |   +---UpcomingBillsCard.tsx
+|   |   |   |   +---cards
+|   |   |   |   |   +---AccountStack.tsx
+|   |   |   |   |   +---ActivityCard.tsx
+|   |   |   |   |   +---GrowthTargetsCard.tsx
+|   |   |   |   |   \\---HiddenCardsBar.tsx
+|   |   |   |   +---modals
+|   |   |   |   |   +---AccountModal.tsx
+|   |   |   |   |   +---GoalModal.tsx
+|   |   |   |   |   \\---InfoModal.tsx
+|   |   |   |   \\---sheets
+|   |   |   |       +---ActionMenuSheet.tsx
+|   |   |   |       +---ActivitySheet.tsx
+|   |   |   |       +---CategorizeSheet.tsx
+|   |   |   |       +---GrowthTargetsSheet.tsx
+|   |   |   |       +---InsightsSheet.tsx
+|   |   |   |       +---ThisWeekSheet.tsx
+|   |   |   |       \\---TopCategoriesSheet.tsx
+|   |   |   +---hooks
+|   |   |   |   +---useDashboardConfig.ts
+|   |   |   |   +---useFinanceData.ts
+|   |   |   |   +---useFinanceInsights.ts
+|   |   |   |   \\---useTransactionAnimations.ts
+|   |   |   +---store
+|   |   |   \\---utils
+|   |   |       +---financeCadence.ts
+|   |   |       +---financeDashboard.ts
+|   |   |       +---financeDates.ts
+|   |   |       +---financeIcons.tsx
+|   |   |       +---financeRanges.ts
+|   |   |       +---financeUi.ts
+|   |   |       \\---validateFinance.ts
+|   |   +---habits
+|   |   |   +---HabitCaptureModal.tsx
+|   |   |   +---HabitsView.tsx
+|   |   |   +---components
+|   |   |   |   +---HabitModal.tsx
+|   |   |   |   \\---WeeklyGrid.tsx
+|   |   |   \\---hooks
+|   |   |       \\---useHabitLogic.ts
+|   |   +---home
+|   |   |   +---components
+|   |   |   |   +---ActivityDots.tsx
+|   |   |   |   +---AlertsPanel.tsx
+|   |   |   |   +---AuthControl.tsx
+|   |   |   |   +---DailyOverviewCard.tsx
+|   |   |   |   +---FinanceSnapshotCard.tsx
+|   |   |   |   +---FocusTile.tsx
+|   |   |   |   +---QueueList.tsx
+|   |   |   |   +---ResurfacingCard.tsx
+|   |   |   |   +---StreakTile.tsx
+|   |   |   |   +---TodayStatusCard.tsx
+|   |   |   |   \\---ZapCaptureInput.tsx
+|   |   |   \\---view
+|   |   |       \\---HomeView.tsx
+|   |   +---page_detail
+|   |   |   \\---PageDetailView.tsx
+|   |   +---settings
+|   |   |   \\---SettingsView.tsx
+|   |   \\---tasks
+|   |       +---components
+|   |       |   +---CaptureModal.tsx
+|   |       |   +---useArchivedTasks.ts
+|   |       |   +---useDailyRollover.ts
+|   |       |   +---useNotes.ts
+|   |       |   +---useTasks.ts
+|   |       |   +---useTaskSelection.tsx
+|   |       |   +---useTaskStats.ts
+|   |       |   +---notes
+|   |       |   |   +---NoteCard.tsx
+|   |       |   |   +---NoteFilters.tsx
+|   |       |   |   \\---TaskNoteComposer.tsx
+|   |       |   \\---tasks
+|   |       |       +---TaskBulkActions.tsx
+|   |       |       +---TaskCreator.tsx
+|   |       |       +---TaskItem.tsx
+|   |       |       +---TaskPriorityDot.tsx
+|   |       |       +---TaskSearchBar.tsx
+|   |       |       \\---TasksHeader.tsx
+|   |       \\---views
+|   |           \\---TasksView.tsx
+|   +---hooks
+|   |   +---useAuth.ts
+|   |   \\---useLocalStorage.ts
+|   +---lib
+|   |   +---financeEntries.ts
+|   |   \\---supabase.ts
+|   +---store
+|   |   +---access.ts
+|   |   \\---authContext.tsx
+|   +---types
+|   |   +---api.ts
+|   |   +---auth.ts
+|   |   +---index.ts
+|   |   \\---user.ts
+|   \\---utils
+|       +---formatters.ts
+|       +---sanitize.ts
+|       +---storageGuards.ts
+|       \\---todo.ts
++---supabase
+|   +---.temp
+|   |   +---cli-latest
+|   |   +---gotrue-version
+|   |   +---pooler-url
+|   |   +---postgres-version
+|   |   +---project-ref
+|   |   +---rest-version
+|   |   +---storage-migration
+|   |   \\---storage-version
+|   +---functions
+|   |   \\---finance-entries
+|   |       \\---index.ts
+|   \\---migrations
+|       +---20260109193300_finance_recurring.sql
+|       \\---20260109194500_user_settings_currency.sql
+\\---templates
+    +---a.tsx
+    +---fin.tsx
+    \\---task.tsx
+        \\---task.tsx

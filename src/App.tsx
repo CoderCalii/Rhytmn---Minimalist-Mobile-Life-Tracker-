@@ -27,6 +27,16 @@ import { sanitizeText } from './utils/sanitize';
 type ViewState = 'home' | 'tasks' | 'habits' | 'finance' | 'page_detail' | 'settings';
 type CurrencyCode = 'USD' | 'PHP';
 
+const readStoredCurrency = (): CurrencyCode => {
+  if (typeof window === 'undefined') return 'USD';
+  try {
+    const stored = window.localStorage.getItem('settings.currencyCode');
+    return stored === 'PHP' ? 'PHP' : 'USD';
+  } catch {
+    return 'USD';
+  }
+};
+
 // --- Main App ---
 
 export default function App() {
@@ -46,7 +56,7 @@ export default function App() {
   const fabLongPressTriggeredRef = useRef(false);
   const [habitsRefreshToken, setHabitsRefreshToken] = useState(0);
   const [financeRefreshToken, setFinanceRefreshToken] = useState(0);
-  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>('USD');
+  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(() => readStoredCurrency());
   const [currencyLoaded, setCurrencyLoaded] = useState(false);
 
   const [isAddingInline, setIsAddingInline] = useState(false);
@@ -61,7 +71,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setCurrencyCode('USD');
+      setCurrencyCode(readStoredCurrency());
       setCurrencyLoaded(false);
       return;
     }
@@ -77,7 +87,7 @@ export default function App() {
       .then(({ data, error }) => {
         if (!isMounted) return;
         if (error) {
-          setCurrencyCode('USD');
+          setCurrencyCode(readStoredCurrency());
         } else {
           setCurrencyCode(data?.currency_code === 'PHP' ? 'PHP' : 'USD');
         }
@@ -95,6 +105,11 @@ export default function App() {
       .from('user_settings')
       .upsert({ user_id: user.id, currency_code: currencyCode }, { onConflict: 'user_id' });
   }, [user, currencyCode, currencyLoaded]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('settings.currencyCode', currencyCode);
+  }, [currencyCode]);
 
   
   const activePage = activePageId ? pages.find(p => p.id === activePageId) : null;

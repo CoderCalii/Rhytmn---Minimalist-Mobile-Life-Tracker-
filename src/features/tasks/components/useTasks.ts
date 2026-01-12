@@ -48,16 +48,11 @@ export interface AddTaskInput {
 
 export function useTasks(userId: string | null) {
   const [tasks, setTasks] = useState<TaskRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => Boolean(userId))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!userId) {
-      setTasks([])
-      setLoading(false)
-      setError(null)
-      return
-    }
+    if (!userId) return
 
     let isMounted = true
     setLoading(true)
@@ -85,12 +80,7 @@ export function useTasks(userId: string | null) {
   }, [userId])
 
   const refreshTasks = useCallback(async () => {
-    if (!userId) {
-      setTasks([])
-      setLoading(false)
-      setError(null)
-      return
-    }
+    if (!userId) return
     setLoading(true)
     setError(null)
     const { data, error: fetchError } = await supabase
@@ -208,10 +198,14 @@ export function useTasks(userId: string | null) {
     return true
   }, [tasks, userId])
 
+  const resolvedTasks = userId ? tasks : []
+  const resolvedLoading = userId ? loading : false
+  const resolvedError = userId ? error : null
+
   return {
-    tasks,
-    loading,
-    error,
+    tasks: resolvedTasks,
+    loading: resolvedLoading,
+    error: resolvedError,
     refreshTasks,
     addTask,
     toggleTask,

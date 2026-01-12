@@ -56,7 +56,7 @@ const getCurrentStreak = (dates: Set<string>, startDate: Date) => {
 };
 
 const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
-  const [scale, setScale] = useState<TimeScale>('Weekly');
+  const [scale, setScale] = useState<TimeScale>('Daily');
   const { user, loading: authLoading } = useAuth();
   const [habits, setHabits] = useState<HabitEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,7 +234,7 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
                     {weekKeys.map((dateKey) => (
                       <div
                         key={dateKey}
-                        className={`flex-1 rounded-lg transition-all duration-500 ${habit.completedDates.has(dateKey) ? habit.color : 'bg-gray-100'}`}
+                        className={`flex-1 rounded-lg transition-all duration-500 ${habit.completedDates.has(dateKey) ? habit.color : 'bg-[#f3f4f6]'}`}
                       />
                     ))}
                   </div>
@@ -263,7 +263,7 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
                       return (
                         <div 
                           key={dateKey} 
-                          className={`aspect-square rounded-sm ${isActive ? habit.color : 'bg-gray-100'}`}
+                          className={`aspect-square rounded-sm ${isActive ? habit.color : 'bg-[#f3f4f6]'}`}
                         />
                       );
                     })}
@@ -293,7 +293,7 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
                       const completionPercent = daysInMonth ? Math.round((count / daysInMonth) * 100) : 0;
                       return (
                         <div key={format(monthDate, 'yyyy-MM')} className="flex flex-col gap-1">
-                          <div className="w-6 h-20 bg-gray-50 rounded-full relative overflow-hidden">
+                          <div className="w-6 h-20 bg-[#f3f4f6] rounded-full relative overflow-hidden">
                             <div 
                               className={`absolute bottom-0 left-0 right-0 ${habit.color} transition-all duration-1000`} 
                               style={{ height: `${completionPercent}%` }}

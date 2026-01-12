@@ -25,7 +25,9 @@ const BottomSheet = ({ isOpen, title, onClose, children }: BottomSheetProps) => 
             <X size={16} />
           </button>
         </div>
-        {children}
+        <div className="max-h-[70vh] overflow-y-auto pr-1 no-scrollbar">
+          {children}
+        </div>
       </div>
     </div>
   );

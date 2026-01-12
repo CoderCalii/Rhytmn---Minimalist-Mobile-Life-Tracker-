@@ -22,16 +22,11 @@ export interface AddNoteInput {
 
 export function useNotes(userId: string | null) {
   const [notes, setNotes] = useState<NoteRow[]>([])
-  const [notesLoading, setNotesLoading] = useState(true)
+  const [notesLoading, setNotesLoading] = useState(() => Boolean(userId))
   const [notesError, setNotesError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!userId) {
-      setNotes([])
-      setNotesLoading(false)
-      setNotesError(null)
-      return
-    }
+    if (!userId) return
 
     let isMounted = true
     setNotesLoading(true)
@@ -59,12 +54,7 @@ export function useNotes(userId: string | null) {
   }, [userId])
 
   const refreshNotes = useCallback(async () => {
-    if (!userId) {
-      setNotes([])
-      setNotesLoading(false)
-      setNotesError(null)
-      return
-    }
+    if (!userId) return
     setNotesLoading(true)
     setNotesError(null)
     const { data, error: fetchError } = await supabase
@@ -114,10 +104,14 @@ export function useNotes(userId: string | null) {
     return null
   }, [userId])
 
+  const resolvedNotes = userId ? notes : []
+  const resolvedLoading = userId ? notesLoading : false
+  const resolvedError = userId ? notesError : null
+
   return {
-    notes,
-    notesLoading,
-    notesError,
+    notes: resolvedNotes,
+    notesLoading: resolvedLoading,
+    notesError: resolvedError,
     refreshNotes,
     addNote
   }
