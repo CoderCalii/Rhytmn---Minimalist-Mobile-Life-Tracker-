@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -9,7 +9,6 @@ import {
   TextInput,
   View
 } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -27,6 +26,15 @@ import { supabase } from '../../lib/supabase';
 import { createFinanceEntry } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { DummyNavigationProvider } from './components/capturemodal_components/DummyNavigationProvider';
+import { TransactionTypeSelector, transactionTypes, type TransactionType } from './components/capturemodal_components/TransactionTypeSelector';
+import { AmountInput } from './components/capturemodal_components/AmountInput';
+import { ModalHeader } from './components/capturemodal_components/ModalHeader';
+import { CategorySelector } from './components/capturemodal_components/CategorySelector';
+import { AccountSelector } from './components/capturemodal_components/AccountSelector';
+import { GoalSelector } from './components/capturemodal_components/GoalSelector';
+import { NotesSection } from './components/capturemodal_components/NotesSection';
+import { ConfirmButton } from './components/capturemodal_components/ConfirmButton';
 
 interface FinanceCaptureModalProps {
   onClose: () => void;
@@ -39,7 +47,6 @@ interface FinanceCaptureModalProps {
   currencyCode?: 'USD' | 'PHP';
 }
 
-type TransactionType = 'income' | 'expense' | 'goal' | 'transfer';
 type GoalFlow = 'contribution' | 'withdrawal';
 
 interface FinanceAccountRow {
@@ -118,18 +125,6 @@ const FinanceCaptureModal = ({
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [goalsLoading, setGoalsLoading] = useState(false);
 
-  const transactionTypes: Array<{
-    id: TransactionType;
-    label: string;
-    icon: ReactNode;
-    accent: string;
-  }> = [
-    { id: 'income', label: 'Income', icon: <ArrowDownLeft size={14} color="#10b981" />, accent: '#10b981' },
-    { id: 'expense', label: 'Expense', icon: <ArrowUpRight size={14} color="#f43f5e" />, accent: '#f43f5e' },
-    { id: 'transfer', label: 'Transfer', icon: <ArrowLeftRight size={14} color="#2563eb" />, accent: '#2563eb' },
-    { id: 'goal', label: 'Goal', icon: <Target size={14} color="#7c3aed" />, accent: '#7c3aed' }
-  ];
-
   const currentTypeData = transactionTypes.find((t) => t.id === type) ?? transactionTypes[0];
   const safeCategorySets = useMemo(() => normalizeCategorySets(categorySets), [categorySets]);
   const categoriesForType = safeCategorySets[type] ?? [];
@@ -159,11 +154,31 @@ const FinanceCaptureModal = ({
   };
 
   useEffect(() => {
+    console.log('[FinanceCaptureModal] Component mounted');
+    console.log('[FinanceCaptureModal] Initial props:', {
+      initialType,
+      initialGoalId,
+      accountsCount: accountsProp?.length ?? 0,
+      goalsCount: goalsProp?.length ?? 0
+    });
     return () => {
+      console.log('[FinanceCaptureModal] Component unmounting');
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    console.log('[FinanceCaptureModal] Type state changed:', type);
+  }, [type]);
+
+  useEffect(() => {
+    console.log('[FinanceCaptureModal] Accounts changed:', accounts.length);
+  }, [accounts.length]);
+
+  useEffect(() => {
+    console.log('[FinanceCaptureModal] Goals changed:', goals.length);
+  }, [goals.length]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -291,6 +306,29 @@ const FinanceCaptureModal = ({
       setType(initialType);
     }
   }, [initialType]);
+
+  const handleTypeChange = useCallback((newType: TransactionType) => {
+    console.log('[FinanceCaptureModal] handleTypeChange called:', newType);
+    console.log('[FinanceCaptureModal] Current type:', type);
+    console.log('[FinanceCaptureModal] Current state:', {
+      amount,
+      category,
+      selectedAccountId,
+      selectedDestinationAccountId,
+      selectedGoal,
+      goalFlow
+    });
+    
+    // Update state directly - the DummyNavigationProvider should handle context
+    try {
+      setType(newType);
+      setCategory('');
+      console.log('[FinanceCaptureModal] State updated successfully');
+    } catch (error) {
+      console.error('[FinanceCaptureModal] Error in handleTypeChange:', error);
+      console.error('[FinanceCaptureModal] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    }
+  }, [type, amount, category, selectedAccountId, selectedDestinationAccountId, selectedGoal, goalFlow]);
 
   const addCategoryTag = () => {
     if (type === 'transfer' || type === 'goal') return;
@@ -501,299 +539,125 @@ const FinanceCaptureModal = ({
     }
   };
 
+  // Error boundary for navigation context errors
+  useEffect(() => {
+    const originalError = console.error;
+    console.error = (...args: any[]) => {
+      if (args[0]?.toString?.().includes('navigation context') || 
+          args[0]?.toString?.().includes('NavigationContainer')) {
+        console.error('[FinanceCaptureModal] Navigation context error detected:', ...args);
+        console.error('[FinanceCaptureModal] Current state at error:', {
+          type,
+          amount,
+          category,
+          selectedAccountId,
+          selectedDestinationAccountId,
+          selectedGoal
+        });
+      }
+      originalError(...args);
+    };
+    
+    return () => {
+      console.error = originalError;
+    };
+  }, [type, amount, category, selectedAccountId, selectedDestinationAccountId, selectedGoal]);
+
   return (
-    <Modal transparent visible animationType="slide" onRequestClose={onClose}>
-      <NavigationContainer independent>
+    <Modal 
+      transparent 
+      visible={true} 
+      animationType="slide" 
+      onRequestClose={onClose}
+      statusBarTranslucent
+      onShow={() => console.log('[FinanceCaptureModal] Modal onShow called')}
+    >
+      <DummyNavigationProvider>
         <View className="flex-1 items-center justify-end px-4 pb-10">
-          <BlurView intensity={45} tint="dark" className="absolute inset-0" pointerEvents="none" />
-          <Pressable className="absolute inset-0 bg-black/60" onPress={onClose} />
+        <BlurView intensity={45} tint="dark" className="absolute inset-0" pointerEvents="none" />
+        <Pressable className="absolute inset-0 bg-black/60" onPress={onClose} />
 
           <View className="w-full max-w-sm rounded-[3.5rem] bg-white overflow-hidden shadow-2xl">
             <ScrollView contentContainerStyle={{ padding: 28 }} showsVerticalScrollIndicator={false}>
-              <View className="flex-row items-center justify-between mb-6">
-                <View className="flex-row items-center px-3 py-1 bg-slate-50 rounded-full">
-                  <View className="mr-2">
-                    <Calendar size={12} color="#94a3b8" />
-                  </View>
-                  <Text className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    {now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })},{' '}
-                    {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                  </Text>
-                </View>
-                <Pressable onPress={onClose} className="p-2.5 bg-slate-50 rounded-full">
-                  <X size={18} color="#94a3b8" />
-                </Pressable>
-              </View>
-
-              <View className="mb-8 p-1 bg-slate-100 rounded-[2rem] flex-row items-center">
-                {transactionTypes.map((t) => {
-                  const active = type === t.id;
-                  return (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => {
-                        setType(t.id);
-                        setCategory('');
-                      }}
-                      className={`flex-1 py-3.5 rounded-[1.7rem] flex-row items-center justify-center ${active ? 'bg-white shadow-sm' : ''}`}
-                    >
-                      <View className="flex-row items-center">
-                        <View className="mr-2">
-                          {t.icon}
-                        </View>
-                        <Text className={`text-[10px] font-black uppercase tracking-wider ${active ? 'text-black' : 'text-slate-400'}`}>
-                          {t.label}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View className="items-center mb-8">
-                <View className="flex-row items-center justify-center">
-                  <Text className="text-3xl mr-1 self-start mt-4 opacity-40" style={{ color: currentTypeData.accent }}>
-                    {resolvedCurrencySymbol}
-                  </Text>
-                  <TextInput
-                    placeholder="0"
-                    value={amount === null ? '' : String(amount)}
-                    onChangeText={(next) => setAmount(next === '' ? null : Number(next))}
-                    keyboardType="numeric"
-                    className="w-48 text-center text-5xl font-black text-slate-900"
-                    placeholderTextColor="#e2e8f0"
-                  />
-                </View>
-              </View>
+              <ModalHeader date={now} onClose={onClose} />
+              <TransactionTypeSelector type={type} onTypeChange={handleTypeChange} />
+              <AmountInput 
+                amount={amount} 
+                onAmountChange={setAmount}
+                currencySymbol={resolvedCurrencySymbol}
+                accentColor={currentTypeData.accent}
+              />
 
             <View className="mb-8">
               {type === 'transfer' ? (
                 <View className="mb-6">
                   <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">From account</Text>
-                  {accountsLoading ? (
-                    <Text className="text-[10px] font-bold text-slate-400">Loading accounts...</Text>
-                  ) : accounts.length === 0 ? (
-                    <Text className="text-[10px] font-bold text-slate-400">No accounts found.</Text>
-                  ) : (
-                    <View className="flex-row flex-wrap">
-                      {accounts.map((account) => {
-                        const isSelected = selectedAccountId === account.id;
-                        const isDisabled = account.id === selectedDestinationAccountId;
-                        const isOverdraft = isSelected && transferAmount > account.balance;
-                        return (
-                          <Pressable
-                            key={account.id}
-                            onPress={() => setSelectedAccountId(account.id)}
-                            disabled={isDisabled}
-                            className={`px-4 py-2 rounded-2xl mb-2 mr-2 ${
-                              isSelected ? 'bg-black' : 'bg-slate-50'
-                            } ${isDisabled ? 'opacity-40' : ''}`}
-                          >
-                            <Text className={`text-[10px] font-bold ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                              {account.name} - {account.lastFour}
-                            </Text>
-                            {isSelected && (
-                              <Text className={`mt-1 text-[9px] font-semibold ${isOverdraft ? 'text-rose-500' : 'text-slate-300'}`}>
-                                Current: {formatMoney(account.balance)}
-                              </Text>
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
+                  <AccountSelector
+                    accounts={accounts}
+                    selectedAccountId={selectedAccountId}
+                    onAccountSelect={setSelectedAccountId}
+                    loading={accountsLoading}
+                    formatMoney={formatMoney}
+                    disabledAccountId={selectedDestinationAccountId}
+                    showBalance
+                    isOverdraft={selectedAccountId ? (accounts.find(a => a.id === selectedAccountId)?.balance ?? 0) < transferAmount : false}
+                  />
                 </View>
               ) : type !== 'goal' ? (
-                <View className="mb-6">
-                  <View className="flex-row items-center justify-between mb-3">
-                    <Text className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">Category</Text>
-                    {(type === 'income' || type === 'expense') && (
-                      <Pressable onPress={() => setIsEditingCategories((prev) => !prev)}>
-                        <Text className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                          {isEditingCategories ? 'Done' : 'Edit'}
-                        </Text>
-                      </Pressable>
-                    )}
-                  </View>
-                  <View className="flex-row flex-wrap">
-                    {categoriesForType.map((cat) => (
-                      isEditingCategories ? (
-                        <View
-                          key={cat}
-                          className={`flex-row items-center rounded-2xl px-3 py-2 mr-2 mb-2 ${
-                            category.toLowerCase() === cat.toLowerCase() ? 'bg-slate-900' : 'bg-slate-50'
-                          }`}
-                        >
-                          <Pressable onPress={() => setCategory(cat)}>
-                            <Text className={`text-[10px] font-bold ${category.toLowerCase() === cat.toLowerCase() ? 'text-white' : 'text-slate-400'}`}>
-                              {cat}
-                            </Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => removeCategoryTag(cat)}
-                            className={`ml-2 h-5 w-5 items-center justify-center rounded-full ${
-                              category.toLowerCase() === cat.toLowerCase() ? 'bg-white/20' : 'bg-white'
-                            }`}
-                            accessibilityLabel={`Remove ${cat}`}
-                          >
-                            <X size={10} color={category.toLowerCase() === cat.toLowerCase() ? '#ffffff' : '#94a3b8'} />
-                          </Pressable>
-                        </View>
-                      ) : (
-                        <Pressable
-                          key={cat}
-                          onPress={() => setCategory(cat)}
-                          className={`px-4 py-2 rounded-2xl mr-2 mb-2 ${
-                            category === cat ? 'bg-slate-900' : 'bg-slate-50'
-                          }`}
-                        >
-                          <Text className={`text-[10px] font-bold ${category === cat ? 'text-white' : 'text-slate-400'}`}>
-                            {cat}
-                          </Text>
-                        </Pressable>
-                      )
-                    ))}
-                    {!isEditingCategories && categoriesForType.length === 0 && (
-                      <Text className="text-[10px] font-bold text-slate-400">No categories yet.</Text>
-                    )}
-                  </View>
-                  {isEditingCategories && (
-                    <View className="mt-3 flex-row items-center">
-                      <TextInput
-                        placeholder="Add category"
-                        value={newCategory}
-                        onChangeText={(value) => setNewCategory(sanitizeText(value))}
-                        onSubmitEditing={addCategoryTag}
-                        className="flex-1 rounded-2xl bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700"
-                        placeholderTextColor="#cbd5f5"
-                      />
-                      <Pressable
-                        onPress={addCategoryTag}
-                        className="ml-2 rounded-2xl bg-black px-4 py-2"
-                      >
-                        <Text className="text-[10px] font-bold uppercase tracking-widest text-white">Add</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
+                <CategorySelector
+                  categories={categoriesForType}
+                  selectedCategory={category}
+                  onCategorySelect={setCategory}
+                  isEditing={isEditingCategories}
+                  onToggleEdit={() => setIsEditingCategories((prev) => !prev)}
+                  onAddCategory={addCategoryTag}
+                  onRemoveCategory={removeCategoryTag}
+                  newCategory={newCategory}
+                  onNewCategoryChange={setNewCategory}
+                  type={type}
+                />
               ) : null}
 
               {type === 'transfer' ? (
                 <View className="mb-6">
                   <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">To account</Text>
-                  {accountsLoading ? (
-                    <Text className="text-[10px] font-bold text-slate-400">Loading accounts...</Text>
-                  ) : accounts.length < 2 ? (
+                  {accounts.length < 2 ? (
                     <Text className="text-[10px] font-bold text-slate-400">Add another account to transfer.</Text>
                   ) : (
-                    <View className="flex-row flex-wrap">
-                      {accounts.map((account) => {
-                        const isSelected = selectedDestinationAccountId === account.id;
-                        const isDisabled = account.id === selectedAccountId;
-                        const nextBalance = account.balance + transferAmount;
-                        return (
-                          <Pressable
-                            key={account.id}
-                            onPress={() => setSelectedDestinationAccountId(account.id)}
-                            disabled={isDisabled}
-                            className={`px-4 py-2 rounded-2xl mb-2 mr-2 ${
-                              isSelected ? 'bg-black' : 'bg-slate-50'
-                            } ${isDisabled ? 'opacity-40' : ''}`}
-                          >
-                            <Text className={`text-[10px] font-bold ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                              {account.name} - {account.lastFour}
-                            </Text>
-                            {isSelected && (
-                              <Text className="mt-1 text-[9px] font-semibold text-blue-200">
-                                After: {formatMoney(nextBalance)}
-                              </Text>
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
+                    <AccountSelector
+                      accounts={accounts}
+                      selectedAccountId={selectedDestinationAccountId}
+                      onAccountSelect={setSelectedDestinationAccountId}
+                      loading={accountsLoading}
+                      formatMoney={formatMoney}
+                      disabledAccountId={selectedAccountId}
+                      showProjectedBalance
+                      projectedBalance={selectedDestinationAccountId ? accounts.find(a => a.id === selectedDestinationAccountId)?.balance ? (accounts.find(a => a.id === selectedDestinationAccountId)!.balance + transferAmount) : undefined : undefined}
+                    />
                   )}
                 </View>
               ) : type !== 'goal' ? (
                 <View className="mb-6">
                   <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">Account</Text>
-                  {accountsLoading ? (
-                    <Text className="text-[10px] font-bold text-slate-400">Loading accounts...</Text>
-                  ) : accounts.length === 0 ? (
-                    <Text className="text-[10px] font-bold text-slate-400">No accounts found.</Text>
-                  ) : (
-                    <View className="flex-row flex-wrap">
-                      {accounts.map((account) => (
-                        <Pressable
-                          key={account.id}
-                          onPress={() => setSelectedAccountId(account.id)}
-                          className={`px-4 py-2 rounded-2xl mb-2 mr-2 ${
-                            selectedAccountId === account.id ? 'bg-black' : 'bg-slate-50'
-                          }`}
-                        >
-                          <Text className={`text-[10px] font-bold ${selectedAccountId === account.id ? 'text-white' : 'text-slate-400'}`}>
-                            {account.name} - {account.lastFour}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
+                  <AccountSelector
+                    accounts={accounts}
+                    selectedAccountId={selectedAccountId}
+                    onAccountSelect={setSelectedAccountId}
+                    loading={accountsLoading}
+                    formatMoney={formatMoney}
+                  />
                 </View>
               ) : null}
 
               {type === 'goal' && (
-                <View className="mb-6">
-                  <View className="flex-row items-center justify-between">
-                    <Text className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                      Destination
-                    </Text>
-                    <View className="flex-row items-center rounded-full bg-purple-50 p-1">
-                      <Pressable
-                        onPress={() => setGoalFlow('contribution')}
-                        className={`px-3 py-1 rounded-full ${goalFlow === 'contribution' ? 'bg-white' : ''}`}
-                      >
-                        <Text className={`text-[9px] font-bold uppercase tracking-widest ${goalFlow === 'contribution' ? 'text-purple-700' : 'text-purple-300'}`}>
-                          Add
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => setGoalFlow('withdrawal')}
-                        className={`px-3 py-1 rounded-full ${goalFlow === 'withdrawal' ? 'bg-white' : ''}`}
-                      >
-                        <Text className={`text-[9px] font-bold uppercase tracking-widest ${goalFlow === 'withdrawal' ? 'text-purple-700' : 'text-purple-300'}`}>
-                          Withdraw
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <View className="mt-4 flex-row flex-wrap">
-                    {goalsLoading ? (
-                      <View className="w-full py-4 px-4 bg-slate-50 rounded-2xl">
-                        <Text className="text-[10px] font-bold text-slate-400 text-center italic">Loading goals...</Text>
-                      </View>
-                    ) : goals.length > 0 ? (
-                      goals.map((goal) => (
-                        <Pressable
-                          key={goal.id}
-                          onPress={() => setSelectedGoal(goal.id)}
-                          className={`p-4 rounded-2xl border-2 mb-2 mr-2 flex-row items-center justify-between ${
-                            selectedGoal === goal.id ? 'border-purple-600 bg-purple-50' : 'border-slate-50 bg-slate-50'
-                          }`}
-                        >
-                          <Text className={`text-[10px] font-black ${selectedGoal === goal.id ? 'text-purple-700' : 'text-slate-400'}`}>
-                            {goal.name}
-                          </Text>
-                          {selectedGoal === goal.id && <Check size={12} color="#7c3aed" />}
-                        </Pressable>
-                      ))
-                    ) : (
-                      <View className="w-full py-4 px-4 bg-slate-50 rounded-2xl">
-                        <Text className="text-[10px] font-bold text-slate-400 text-center italic">No active goals found</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
+                <GoalSelector
+                  goals={goals}
+                  selectedGoalId={selectedGoal}
+                  onGoalSelect={setSelectedGoal}
+                  goalFlow={goalFlow}
+                  onGoalFlowChange={setGoalFlow}
+                  loading={goalsLoading}
+                />
               )}
 
               {type === 'goal' && (
@@ -801,107 +665,46 @@ const FinanceCaptureModal = ({
                   <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">
                     {goalFlow === 'contribution' ? 'Fund from' : 'Withdraw to'}
                   </Text>
-                  {accountsLoading ? (
-                    <Text className="text-[10px] font-bold text-slate-400">Loading accounts...</Text>
-                  ) : accounts.length === 0 ? (
-                    <Text className="text-[10px] font-bold text-slate-400">No accounts found.</Text>
-                  ) : (
-                    <View className="flex-row flex-wrap">
-                      {accounts.map((account) => {
-                        const isSelected = selectedAccountId === account.id;
-                        const isInsufficient =
-                          isSelected &&
-                          goalFlow === 'contribution' &&
-                          !hasSufficientBalance(account.balance, transferAmount);
-                        const projectedBalance = goalFlow === 'contribution'
-                          ? account.balance - transferAmount
-                          : account.balance + transferAmount;
-
-                        return (
-                          <Pressable
-                            key={account.id}
-                            onPress={() => setSelectedAccountId(account.id)}
-                            className={`px-4 py-2 rounded-2xl mb-2 mr-2 ${isSelected ? 'bg-black' : 'bg-slate-50'}`}
-                          >
-                            <Text className={`text-[10px] font-bold ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                              {account.name} - {account.lastFour}
-                            </Text>
-                            {isSelected && (
-                              <>
-                                <Text className={`mt-1 text-[9px] font-semibold ${isInsufficient ? 'text-rose-500' : 'text-slate-300'}`}>
-                                  Current: {formatMoney(account.balance)}
-                                </Text>
-                                <Text className="mt-1 text-[9px] font-semibold text-blue-200">
-                                  Projected Balance: {formatMoney(projectedBalance)}
-                                </Text>
-                              </>
-                            )}
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
+                  <AccountSelector
+                    accounts={accounts}
+                    selectedAccountId={selectedAccountId}
+                    onAccountSelect={setSelectedAccountId}
+                    loading={accountsLoading}
+                    formatMoney={formatMoney}
+                    showBalance
+                    showProjectedBalance
+                    projectedBalance={selectedAccountId
+                      ? goalFlow === 'contribution'
+                        ? (accounts.find(a => a.id === selectedAccountId)?.balance ?? 0) - transferAmount
+                        : (accounts.find(a => a.id === selectedAccountId)?.balance ?? 0) + transferAmount
+                      : undefined}
+                    isOverdraft={selectedAccountId && goalFlow === 'contribution'
+                      ? !hasSufficientBalance(accounts.find(a => a.id === selectedAccountId)?.balance ?? 0, transferAmount)
+                      : false}
+                  />
                 </View>
               )}
 
-              <View className="mb-6">
-                <Pressable onPress={() => setShowNotes(!showNotes)}>
-                  <Text className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
-                    {showNotes ? 'Remove Note' : 'Add Note'}
-                  </Text>
-                </Pressable>
-                {showNotes && (
-                  <TextInput
-                    placeholder="What was this for?"
-                    className="w-full mt-3 p-4 bg-slate-50 rounded-3xl text-sm text-slate-700"
-                    placeholderTextColor="#cbd5f5"
-                    value={note}
-                    onChangeText={(value) => setNote(sanitizeText(value))}
-                    multiline
-                    textAlignVertical="top"
-                  />
-                )}
-              </View>
+              <NotesSection
+                showNotes={showNotes}
+                note={note}
+                onToggleNotes={() => setShowNotes(!showNotes)}
+                onNoteChange={setNote}
+              />
             </View>
 
-            <Pressable
+            <ConfirmButton
+              type={type}
+              isSaving={isSaving}
+              isDisabled={isConfirmDisabled}
               onPress={handleConfirm}
-              disabled={isConfirmDisabled}
-              className={`w-full py-5 rounded-[2rem] shadow-xl ${
-                type === 'income'
-                  ? 'bg-emerald-500'
-                  : type === 'expense'
-                    ? 'bg-black'
-                    : type === 'transfer'
-                      ? 'bg-blue-600'
-                      : 'bg-purple-600'
-              } ${isConfirmDisabled ? 'opacity-60' : ''}`}
-            >
-              {isSaving ? (
-                <View className="flex-row items-center justify-center">
-                  <ActivityIndicator color="#ffffff" size="small" />
-                  <Text className="ml-2 font-black text-base text-white">Saving...</Text>
-                </View>
-              ) : (
-                <Text className="text-center font-black text-base text-white">Confirm Entry</Text>
-              )}
-            </Pressable>
-            {error && <Text className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</Text>}
-              {toast && (
-                <View
-                  className={`mt-3 rounded-2xl px-4 py-2 ${
-                    toast.type === 'success' ? 'bg-emerald-50' : 'bg-rose-50'
-                  }`}
-                >
-                  <Text className={`text-center text-xs font-semibold ${toast.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {toast.message}
-                  </Text>
-                </View>
-              )}
+              error={error}
+              toast={toast}
+            />
             </ScrollView>
           </View>
         </View>
-      </NavigationContainer>
+      </DummyNavigationProvider>
     </Modal>
   );
 };
