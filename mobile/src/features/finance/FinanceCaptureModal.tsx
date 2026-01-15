@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View
@@ -26,7 +27,6 @@ import { supabase } from '../../lib/supabase';
 import { createFinanceEntry } from '../../lib/financeEntries';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import { DummyNavigationProvider } from './components/capturemodal_components/DummyNavigationProvider';
 import { TransactionTypeSelector, transactionTypes, type TransactionType } from './components/capturemodal_components/TransactionTypeSelector';
 import { AmountInput } from './components/capturemodal_components/AmountInput';
 import { ModalHeader } from './components/capturemodal_components/ModalHeader';
@@ -319,7 +319,7 @@ const FinanceCaptureModal = ({
       goalFlow
     });
     
-    // Update state directly - the DummyNavigationProvider should handle context
+    // Update state directly
     try {
       setType(newType);
       setCategory('');
@@ -539,30 +539,6 @@ const FinanceCaptureModal = ({
     }
   };
 
-  // Error boundary for navigation context errors
-  useEffect(() => {
-    const originalError = console.error;
-    console.error = (...args: any[]) => {
-      if (args[0]?.toString?.().includes('navigation context') || 
-          args[0]?.toString?.().includes('NavigationContainer')) {
-        console.error('[FinanceCaptureModal] Navigation context error detected:', ...args);
-        console.error('[FinanceCaptureModal] Current state at error:', {
-          type,
-          amount,
-          category,
-          selectedAccountId,
-          selectedDestinationAccountId,
-          selectedGoal
-        });
-      }
-      originalError(...args);
-    };
-    
-    return () => {
-      console.error = originalError;
-    };
-  }, [type, amount, category, selectedAccountId, selectedDestinationAccountId, selectedGoal]);
-
   return (
     <Modal 
       transparent 
@@ -572,13 +548,12 @@ const FinanceCaptureModal = ({
       statusBarTranslucent
       onShow={() => console.log('[FinanceCaptureModal] Modal onShow called')}
     >
-      <DummyNavigationProvider>
-        <View className="flex-1 items-center justify-end px-4 pb-10">
-        <BlurView intensity={45} tint="dark" className="absolute inset-0" pointerEvents="none" />
-        <Pressable className="absolute inset-0 bg-black/60" onPress={onClose} />
+      <View style={styles.container}>
+          <BlurView intensity={45} tint="dark" style={styles.blurView} pointerEvents="none" />
+          <Pressable style={styles.backdrop} onPress={onClose} />
 
-          <View className="w-full max-w-sm rounded-[3.5rem] bg-white overflow-hidden shadow-2xl">
-            <ScrollView contentContainerStyle={{ padding: 28 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.modalContent}>
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
               <ModalHeader date={now} onClose={onClose} />
               <TransactionTypeSelector type={type} onTypeChange={handleTypeChange} />
               <AmountInput 
@@ -588,10 +563,10 @@ const FinanceCaptureModal = ({
                 accentColor={currentTypeData.accent}
               />
 
-            <View className="mb-8">
+            <View style={styles.contentSection}>
               {type === 'transfer' ? (
-                <View className="mb-6">
-                  <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">From account</Text>
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>From account</Text>
                   <AccountSelector
                     accounts={accounts}
                     selectedAccountId={selectedAccountId}
@@ -619,10 +594,10 @@ const FinanceCaptureModal = ({
               ) : null}
 
               {type === 'transfer' ? (
-                <View className="mb-6">
-                  <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">To account</Text>
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>To account</Text>
                   {accounts.length < 2 ? (
-                    <Text className="text-[10px] font-bold text-slate-400">Add another account to transfer.</Text>
+                    <Text style={styles.emptyText}>Add another account to transfer.</Text>
                   ) : (
                     <AccountSelector
                       accounts={accounts}
@@ -637,8 +612,8 @@ const FinanceCaptureModal = ({
                   )}
                 </View>
               ) : type !== 'goal' ? (
-                <View className="mb-6">
-                  <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">Account</Text>
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Account</Text>
                   <AccountSelector
                     accounts={accounts}
                     selectedAccountId={selectedAccountId}
@@ -661,8 +636,8 @@ const FinanceCaptureModal = ({
               )}
 
               {type === 'goal' && (
-                <View className="mb-6">
-                  <Text className="text-[9px] font-black text-slate-300 mb-3 uppercase tracking-[0.2em]">
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>
                     {goalFlow === 'contribution' ? 'Fund from' : 'Withdraw to'}
                   </Text>
                   <AccountSelector
@@ -704,9 +679,67 @@ const FinanceCaptureModal = ({
             </ScrollView>
           </View>
         </View>
-      </DummyNavigationProvider>
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  blurView: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 384,
+    borderRadius: 56,
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 25 },
+    shadowOpacity: 0.25,
+    shadowRadius: 50,
+    elevation: 25,
+  },
+  scrollContent: {
+    padding: 28,
+  },
+  contentSection: {
+    marginBottom: 32,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#cbd5e1',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  emptyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+});
 
 export default FinanceCaptureModal;

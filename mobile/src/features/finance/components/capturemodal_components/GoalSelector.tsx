@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import type { FinanceGoal } from '../../../../types';
 
@@ -22,58 +22,143 @@ export const GoalSelector = ({
   loading
 }: GoalSelectorProps) => {
   return (
-    <View className="mb-6">
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.label}>
           Destination
         </Text>
-        <View className="flex-row items-center rounded-full bg-purple-50 p-1">
+        <View style={styles.flowToggle}>
           <Pressable
             onPress={() => onGoalFlowChange('contribution')}
-            className={`px-3 py-1 rounded-full ${goalFlow === 'contribution' ? 'bg-white' : ''}`}
+            style={[styles.flowButton, goalFlow === 'contribution' && styles.flowButtonActive]}
           >
-            <Text className={`text-[9px] font-bold uppercase tracking-widest ${goalFlow === 'contribution' ? 'text-purple-700' : 'text-purple-300'}`}>
+            <Text style={[styles.flowButtonText, goalFlow === 'contribution' && styles.flowButtonTextActive]}>
               Add
             </Text>
           </Pressable>
           <Pressable
             onPress={() => onGoalFlowChange('withdrawal')}
-            className={`px-3 py-1 rounded-full ${goalFlow === 'withdrawal' ? 'bg-white' : ''}`}
+            style={[styles.flowButton, goalFlow === 'withdrawal' && styles.flowButtonActive]}
           >
-            <Text className={`text-[9px] font-bold uppercase tracking-widest ${goalFlow === 'withdrawal' ? 'text-purple-700' : 'text-purple-300'}`}>
+            <Text style={[styles.flowButtonText, goalFlow === 'withdrawal' && styles.flowButtonTextActive]}>
               Withdraw
             </Text>
           </Pressable>
         </View>
       </View>
 
-      <View className="mt-4 flex-row flex-wrap">
+      <View style={styles.goalsContainer}>
         {loading ? (
-          <View className="w-full py-4 px-4 bg-slate-50 rounded-2xl">
-            <Text className="text-[10px] font-bold text-slate-400 text-center italic">Loading goals...</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Loading goals...</Text>
           </View>
         ) : goals.length > 0 ? (
           goals.map((goal) => (
             <Pressable
               key={goal.id}
               onPress={() => onGoalSelect(goal.id)}
-              className={`p-4 rounded-2xl border-2 mb-2 mr-2 flex-row items-center justify-between ${
-                selectedGoalId === goal.id ? 'border-purple-600 bg-purple-50' : 'border-slate-50 bg-slate-50'
-              }`}
+              style={[styles.goalButton, selectedGoalId === goal.id && styles.goalButtonSelected]}
             >
-              <Text className={`text-[10px] font-black ${selectedGoalId === goal.id ? 'text-purple-700' : 'text-slate-400'}`}>
+              <Text style={[styles.goalText, selectedGoalId === goal.id && styles.goalTextSelected]}>
                 {goal.name}
               </Text>
               {selectedGoalId === goal.id && <Check size={12} color="#7c3aed" />}
             </Pressable>
           ))
         ) : (
-          <View className="w-full py-4 px-4 bg-slate-50 rounded-2xl">
-            <Text className="text-[10px] font-bold text-slate-400 text-center italic">No active goals found</Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No active goals found</Text>
           </View>
         )}
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#cbd5e1',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
+  },
+  flowToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 9999,
+    backgroundColor: '#faf5ff',
+    padding: 4,
+  },
+  flowButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 9999,
+  },
+  flowButtonActive: {
+    backgroundColor: '#ffffff',
+  },
+  flowButtonText: {
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.1,
+    color: '#c4b5fd',
+  },
+  flowButtonTextActive: {
+    color: '#6d28d9',
+  },
+  goalsContainer: {
+    marginTop: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  goalButton: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#f1f5f9',
+    marginBottom: 8,
+    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f1f5f9',
+  },
+  goalButtonSelected: {
+    borderColor: '#9333ea',
+    backgroundColor: '#faf5ff',
+  },
+  goalText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#94a3b8',
+  },
+  goalTextSelected: {
+    color: '#6d28d9',
+  },
+  emptyState: {
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+  },
+  emptyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+});
+
 

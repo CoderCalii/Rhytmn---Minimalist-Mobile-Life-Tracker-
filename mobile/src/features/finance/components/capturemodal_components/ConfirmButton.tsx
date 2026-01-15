@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { TransactionType } from './TransactionTypeSelector';
 
 interface ConfirmButtonProps {
@@ -14,15 +14,15 @@ export const ConfirmButton = ({ type, isSaving, isDisabled, onPress, error, toas
   const getBackgroundColor = () => {
     switch (type) {
       case 'income':
-        return 'bg-emerald-500';
+        return '#10b981';
       case 'expense':
-        return 'bg-black';
+        return '#000000';
       case 'transfer':
-        return 'bg-blue-600';
+        return '#2563eb';
       case 'goal':
-        return 'bg-purple-600';
+        return '#9333ea';
       default:
-        return 'bg-black';
+        return '#000000';
     }
   };
 
@@ -31,25 +31,25 @@ export const ConfirmButton = ({ type, isSaving, isDisabled, onPress, error, toas
       <Pressable
         onPress={onPress}
         disabled={isDisabled}
-        className={`w-full py-5 rounded-[2rem] shadow-xl ${getBackgroundColor()} ${isDisabled ? 'opacity-60' : ''}`}
+        style={[
+          styles.button,
+          { backgroundColor: getBackgroundColor() },
+          isDisabled && styles.buttonDisabled,
+        ]}
       >
         {isSaving ? (
-          <View className="flex-row items-center justify-center">
+          <View style={styles.buttonContent}>
             <ActivityIndicator color="#ffffff" size="small" />
-            <Text className="ml-2 font-black text-base text-white">Saving...</Text>
+            <Text style={styles.buttonText}>Saving...</Text>
           </View>
         ) : (
-          <Text className="text-center font-black text-base text-white">Confirm Entry</Text>
+          <Text style={styles.buttonText}>Confirm Entry</Text>
         )}
       </Pressable>
-      {error && <Text className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</Text>}
+      {error && <Text style={styles.errorText}>{error}</Text>}
       {toast && (
-        <View
-          className={`mt-3 rounded-2xl px-4 py-2 ${
-            toast.type === 'success' ? 'bg-emerald-50' : 'bg-rose-50'
-          }`}
-        >
-          <Text className={`text-center text-xs font-semibold ${toast.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>
+        <View style={[styles.toast, toast.type === 'success' ? styles.toastSuccess : styles.toastError]}>
+          <Text style={[styles.toastText, toast.type === 'success' ? styles.toastTextSuccess : styles.toastTextError]}>
             {toast.message}
           </Text>
         </View>
@@ -57,4 +57,63 @@ export const ConfirmButton = ({ type, isSaving, isDisabled, onPress, error, toas
     </>
   );
 };
+
+const styles = StyleSheet.create({
+  button: {
+    width: '100%',
+    paddingVertical: 20,
+    borderRadius: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 25 },
+    shadowOpacity: 0.25,
+    shadowRadius: 50,
+    elevation: 25,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
+    marginLeft: 8,
+    fontWeight: '900',
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f43f5e',
+    textAlign: 'center',
+  },
+  toast: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  toastSuccess: {
+    backgroundColor: '#ecfdf5',
+  },
+  toastError: {
+    backgroundColor: '#fef2f2',
+  },
+  toastText: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  toastTextSuccess: {
+    color: '#047857',
+  },
+  toastTextError: {
+    color: '#dc2626',
+  },
+});
+
 

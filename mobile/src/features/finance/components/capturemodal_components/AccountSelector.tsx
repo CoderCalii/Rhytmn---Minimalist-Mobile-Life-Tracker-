@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FinanceAccount } from '../../../../types';
 
 interface AccountSelectorProps {
@@ -38,11 +38,11 @@ export const AccountSelector = ({
   });
 
   if (loading) {
-    return <Text className="text-[10px] font-bold text-slate-400">Loading accounts...</Text>;
+    return <Text style={styles.emptyText}>Loading accounts...</Text>;
   }
 
   if (accounts.length === 0) {
-    return <Text className="text-[10px] font-bold text-slate-400">No accounts found.</Text>;
+    return <Text style={styles.emptyText}>No accounts found.</Text>;
   }
 
   const handleAccountSelect = (accountId: string) => {
@@ -57,7 +57,7 @@ export const AccountSelector = ({
   };
 
   return (
-    <View className="flex-row flex-wrap">
+    <View style={styles.container}>
       {accounts.map((account) => {
         const isSelected = selectedAccountId === account.id;
         const isDisabled = disabledAccountId === account.id;
@@ -67,20 +67,22 @@ export const AccountSelector = ({
             key={account.id}
             onPress={() => handleAccountSelect(account.id)}
             disabled={isDisabled}
-            className={`px-4 py-2 rounded-2xl mb-2 mr-2 ${
-              isSelected ? 'bg-black' : 'bg-slate-50'
-            } ${isDisabled ? 'opacity-40' : ''}`}
+            style={[
+              styles.accountButton,
+              isSelected && styles.accountButtonSelected,
+              isDisabled && styles.accountButtonDisabled,
+            ]}
           >
-            <Text className={`text-[10px] font-bold ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+            <Text style={[styles.accountText, isSelected && styles.accountTextSelected]}>
               {account.name} - {account.lastFour}
             </Text>
             {isSelected && showBalance && (
-              <Text className={`mt-1 text-[9px] font-semibold ${isOverdraft ? 'text-rose-500' : 'text-slate-300'}`}>
+              <Text style={[styles.balanceText, isOverdraft && styles.balanceTextOverdraft]}>
                 Current: {formatMoney(account.balance)}
               </Text>
             )}
             {isSelected && showProjectedBalance && projectedBalance !== undefined && (
-              <Text className="mt-1 text-[9px] font-semibold text-blue-200">
+              <Text style={styles.projectedBalanceText}>
                 After: {formatMoney(projectedBalance)}
               </Text>
             )}
@@ -90,3 +92,52 @@ export const AccountSelector = ({
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  emptyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  accountButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginBottom: 8,
+    marginRight: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  accountButtonSelected: {
+    backgroundColor: '#000000',
+  },
+  accountButtonDisabled: {
+    opacity: 0.4,
+  },
+  accountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  accountTextSelected: {
+    color: '#ffffff',
+  },
+  balanceText: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#cbd5e1',
+  },
+  balanceTextOverdraft: {
+    color: '#f43f5e',
+  },
+  projectedBalanceText: {
+    marginTop: 4,
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#bfdbfe',
+  },
+});

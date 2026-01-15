@@ -1,4 +1,4 @@
-import { Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface AmountInputProps {
   amount: number | null;
@@ -9,9 +9,9 @@ interface AmountInputProps {
 
 export const AmountInput = ({ amount, onAmountChange, currencySymbol, accentColor }: AmountInputProps) => {
   return (
-    <View className="items-center mb-8">
-      <View className="flex-row items-center justify-center">
-        <Text className="text-3xl mr-1 self-start mt-4 opacity-40" style={{ color: accentColor }}>
+    <View style={styles.container}>
+      <View style={styles.inputRow}>
+        <Text style={[styles.currencySymbol, { color: accentColor }]}>
           {currencySymbol}
         </Text>
         <TextInput
@@ -19,11 +19,38 @@ export const AmountInput = ({ amount, onAmountChange, currencySymbol, accentColo
           value={amount === null ? '' : String(amount)}
           onChangeText={(next) => onAmountChange(next === '' ? null : Number(next))}
           keyboardType="numeric"
-          className="w-48 text-center text-5xl font-black text-slate-900"
+          style={styles.input}
           placeholderTextColor="#e2e8f0"
         />
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  currencySymbol: {
+    fontSize: 30,
+    marginRight: 4,
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    opacity: 0.4,
+  },
+  input: {
+    width: 192,
+    textAlign: 'center',
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+});
+
 

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -51,20 +51,20 @@ export const TransactionTypeSelector = ({ type, onTypeChange }: TransactionTypeS
   };
 
   return (
-    <View className="mb-8 p-1 bg-slate-100 rounded-[2rem] flex-row items-center">
+    <View style={styles.container}>
       {transactionTypes.map((t) => {
         const active = type === t.id;
         return (
           <Pressable
             key={t.id}
             onPress={() => handlePress(t.id)}
-            className={`flex-1 py-3.5 rounded-[1.7rem] flex-row items-center justify-center ${active ? 'bg-white shadow-sm' : ''}`}
+            style={[styles.button, active && styles.buttonActive]}
           >
-            <View className="flex-row items-center">
-              <View className="mr-2">
+            <View style={styles.buttonContent}>
+              <View style={styles.iconContainer}>
                 {t.icon}
               </View>
-              <Text className={`text-[10px] font-black uppercase tracking-wider ${active ? 'text-black' : 'text-slate-400'}`}>
+              <Text style={[styles.buttonText, active && styles.buttonTextActive]}>
                 {t.label}
               </Text>
             </View>
@@ -74,6 +74,50 @@ export const TransactionTypeSelector = ({ type, onTypeChange }: TransactionTypeS
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 32,
+    padding: 4,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 27,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    marginRight: 8,
+  },
+  buttonText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.05,
+    color: '#94a3b8',
+  },
+  buttonTextActive: {
+    color: '#000000',
+  },
+});
 
 export { transactionTypes };
 export type { TransactionType };
