@@ -1,13 +1,11 @@
 import { Pressable, Text, View } from 'react-native';
 import { CheckCircle2, Circle } from 'lucide-react-native';
-import { TaskPriorityDot, type TaskPriority } from './TaskPriorityDot';
 
 interface TaskItemData {
   id: string;
   title: string;
   completed: boolean;
   due_date?: string | null;
-  priority?: TaskPriority | null;
 }
 
 interface TaskItemProps {
@@ -53,9 +51,6 @@ export function TaskItem({
       </View>
       <View className="flex-1">
         <View className="flex-row items-center">
-          <View className="mr-2">
-            <TaskPriorityDot priority={task.priority} />
-          </View>
           <Text className={`text-lg font-medium ${task.completed ? 'text-gray-300 line-through' : 'text-gray-700'}`}>
             {task.title}
           </Text>

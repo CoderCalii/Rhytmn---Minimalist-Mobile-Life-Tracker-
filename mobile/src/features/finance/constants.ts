@@ -2,7 +2,9 @@ import type { DashboardCardId, TimeRange } from './types';
 
 export const UNKNOWN_DATE_LABEL = 'Unknown date';
 
-export const accountColors = ['bg-black', 'bg-blue-600', 'bg-emerald-500', 'bg-slate-900', 'bg-rose-500'];
+// DEPRECATED: Use ACCOUNT_COLORS from financeUi.ts instead
+// Kept for backward compatibility during migration
+export const accountColors = ['black', 'blue', 'emerald', 'slate', 'rose'];
 export const goalColors = ['bg-orange-50', 'bg-purple-50', 'bg-blue-50', 'bg-rose-50', 'bg-emerald-50'];
 
 export const DASHBOARD_CARD_ORDER: DashboardCardId[] = [

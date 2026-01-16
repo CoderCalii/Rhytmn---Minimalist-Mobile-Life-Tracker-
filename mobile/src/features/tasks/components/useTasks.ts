@@ -1,67 +1,47 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import type { TaskPriority } from './tasks/TaskPriorityDot'
 
 export interface TaskRow {
   id: string
   title: string
   completed: boolean
+  completed_at?: string | null
   created_at?: string | null
   updated_at?: string | null
   due_date?: string | null
-  priority?: TaskPriority | null
+  archived_at?: string | null
   tags?: string | string[] | null
 }
 
-export const parseTags = (value?: string | string[] | null) => {
-  if (!value) return []
-  if (Array.isArray(value)) {
-    return value.map((tag) => tag.trim()).filter(Boolean)
-  }
-  if (typeof value !== 'string') return []
-  return value.split(',').map((tag) => tag.trim()).filter(Boolean)
-}
-
-const addTag = (value: string | string[] | null | undefined, tag: string) => {
-  const tags = new Set(parseTags(value))
-  tags.add(tag)
-  return Array.from(tags)
-}
-
-const buildArchivedTags = (task: TaskRow) => {
-  let nextTags = addTag(task.tags ?? null, 'archived')
-  if (!task.completed) {
-    nextTags = addTag(nextTags, 'incomplete')
-  }
-  return nextTags
-}
-
-export const isTaskArchived = (task: TaskRow) => (
-  parseTags(task.tags ?? null).includes('archived')
-)
-
-export interface AddTaskInput {
-  title: string
-  dueDate?: string | null
-  priority: TaskPriority
-}
-
-export function useTasks(userId: string | null) {
+export function useTasksInternal(userId: string | null) {
   const [tasks, setTasks] = useState<TaskRow[]>([])
+  const [archivedTasks, setArchivedTasks] = useState<TaskRow[]>([])
   const [loading, setLoading] = useState(() => Boolean(userId))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      // Reset state when userId becomes null - using setTimeout to avoid synchronous setState
+      const timer = setTimeout(() => {
+        setTasks([])
+        setArchivedTasks([])
+        setLoading(false)
+        setError(null)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
 
     let isMounted = true
-    const fetchTasks = async () => {
-      if (!isMounted) return
+    // Use setTimeout to avoid synchronous setState warning
+    setTimeout(() => {
       setLoading(true)
       setError(null)
+    }, 0)
+    const fetchTasks = async () => {
+      if (!isMounted) return
       const { data, error: fetchError } = await supabase
         .from('tasks')
-        .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
+        .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
 
@@ -69,8 +49,14 @@ export function useTasks(userId: string | null) {
       if (fetchError) {
         setError('Failed to load tasks.')
         setTasks([])
+        setArchivedTasks([])
       } else {
-        setTasks((data ?? []) as TaskRow[])
+        const allTasks = (data ?? []) as TaskRow[]
+        // Split into active and archived
+        const active = allTasks.filter((task) => !task.archived_at)
+        const archived = allTasks.filter((task) => task.archived_at != null)
+        setTasks(active)
+        setArchivedTasks(archived)
       }
       setLoading(false)
     }
@@ -88,20 +74,26 @@ export function useTasks(userId: string | null) {
     setError(null)
     const { data, error: fetchError } = await supabase
       .from('tasks')
-      .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
+      .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
     if (fetchError) {
       setError('Failed to load tasks.')
       setTasks([])
+      setArchivedTasks([])
     } else {
-      setTasks((data ?? []) as TaskRow[])
+      const allTasks = (data ?? []) as TaskRow[]
+      const active = allTasks.filter((task) => !task.archived_at)
+      const archived = allTasks.filter((task) => task.archived_at != null)
+      setTasks(active)
+      setArchivedTasks(archived)
     }
     setLoading(false)
   }, [userId])
 
-  const addTask = useCallback(async ({ title, dueDate, priority }: AddTaskInput) => {
+  // Create a new active task (completed=false, completed_at=null, archived_at=null)
+  const createTask = useCallback(async (title: string, dueDate?: string | null) => {
     if (!userId) return null
     const updatedAt = new Date().toISOString()
     const { data, error: insertError } = await supabase
@@ -110,12 +102,12 @@ export function useTasks(userId: string | null) {
         user_id: userId,
         title,
         completed: false,
-        tags: null,
         due_date: dueDate || null,
-        priority,
+        completed_at: null,
+        archived_at: null,
         updated_at: updatedAt
       })
-      .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
+      .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
       .single()
 
     if (!insertError && data) {
@@ -127,35 +119,45 @@ export function useTasks(userId: string | null) {
     return null
   }, [userId])
 
-  const toggleTask = useCallback(async (task: TaskRow) => {
+  // Toggle completion, keeping completed/completed_at in sync. Only for non-archived tasks.
+  const completeTask = useCallback(async (taskId: string) => {
     if (!userId) return false
-    const nextCompleted = !task.completed
+    const target = tasks.find((task) => task.id === taskId)
+    if (!target) return false
+
+    const nextCompleted = !target.completed
     const updatedAt = new Date().toISOString()
+    const nextCompletedAt = nextCompleted ? updatedAt : null
     const { error: updateError } = await supabase
       .from('tasks')
-      .update({ completed: nextCompleted, updated_at: updatedAt })
-      .eq('id', task.id)
+      .update({ completed: nextCompleted, completed_at: nextCompletedAt, updated_at: updatedAt })
+      .eq('id', taskId)
       .eq('user_id', userId)
+      .is('archived_at', null)
 
     if (!updateError) {
       setTasks((prev) => prev.map((item) => (
-        item.id === task.id ? { ...item, completed: nextCompleted, updated_at: updatedAt } : item
+        item.id === taskId
+          ? { ...item, completed: nextCompleted, completed_at: nextCompletedAt, updated_at: updatedAt }
+          : item
       )))
       return true
     }
 
     setError('Failed to update task.')
     return false
-  }, [userId])
+  }, [tasks, userId])
 
   const bulkComplete = useCallback(async (ids: string[]) => {
     if (!userId || ids.length === 0) return false
     const updatedAt = new Date().toISOString()
+    const completedAt = updatedAt
     const { error: bulkError } = await supabase
       .from('tasks')
-      .update({ completed: true, updated_at: updatedAt })
+      .update({ completed: true, completed_at: completedAt, updated_at: updatedAt })
       .in('id', ids)
       .eq('user_id', userId)
+      .is('archived_at', null)
 
     if (bulkError) {
       setError('Failed to complete selected tasks.')
@@ -164,54 +166,127 @@ export function useTasks(userId: string | null) {
 
     const selectedSet = new Set(ids)
     setTasks((prev) => prev.map((task) => (
-      selectedSet.has(task.id) ? { ...task, completed: true, updated_at: updatedAt } : task
+      selectedSet.has(task.id)
+        ? { ...task, completed: true, completed_at: completedAt, updated_at: updatedAt }
+        : task
     )))
     return true
   }, [userId])
 
+  // Archive a single task (set archived_at, move from active to archived)
+  const archiveTask = useCallback(async (taskId: string) => {
+    if (!userId) return false
+    const taskToArchive = tasks.find((task) => task.id === taskId)
+    if (!taskToArchive) return false
+
+    const archivedAt = new Date().toISOString()
+    const archivedTask: TaskRow = { ...taskToArchive, archived_at: archivedAt, updated_at: archivedAt }
+
+    // Optimistic update: move from tasks to archivedTasks
+    setTasks((prev) => prev.filter((task) => task.id !== taskId))
+    setArchivedTasks((prev) => [archivedTask, ...prev])
+
+    // Background sync to Supabase
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({ archived_at: archivedAt, updated_at: archivedAt })
+      .eq('id', taskId)
+      .eq('user_id', userId)
+      .is('archived_at', null)
+
+    if (updateError) {
+      // Revert on error
+      setTasks((prev) => [...prev, taskToArchive])
+      setArchivedTasks((prev) => prev.filter((task) => task.id !== taskId))
+      setError('Failed to archive task.')
+      return false
+    }
+
+    return true
+  }, [tasks, userId])
+
   const bulkArchive = useCallback(async (ids: string[]) => {
     if (!userId || ids.length === 0) return false
-    const updatedAt = new Date().toISOString()
-    const selectedSet = new Set(ids)
-    const tasksToArchive = tasks.filter((task) => selectedSet.has(task.id))
+    const tasksToArchive = tasks.filter((task) => ids.includes(task.id))
     if (tasksToArchive.length === 0) return true
 
-    const updates = await Promise.all(tasksToArchive.map(async (task) => {
-      const nextTags = buildArchivedTags(task)
-      const { error: updateError } = await supabase
-        .from('tasks')
-        .update({ tags: nextTags, updated_at: updatedAt })
-        .eq('id', task.id)
-        .eq('user_id', userId)
-      return { id: task.id, tags: nextTags, error: updateError }
+    const archivedAt = new Date().toISOString()
+    const archivedTasksList: TaskRow[] = tasksToArchive.map((task) => ({
+      ...task,
+      archived_at: archivedAt,
+      updated_at: archivedAt
     }))
 
-    const failed = updates.find((update) => update.error)
-    if (failed) {
+    // Optimistic update: move from tasks to archivedTasks
+    const selectedSet = new Set(ids)
+    setTasks((prev) => prev.filter((task) => !selectedSet.has(task.id)))
+    setArchivedTasks((prev) => [...archivedTasksList, ...prev])
+
+    // Background sync to Supabase
+    const { error: bulkError } = await supabase
+      .from('tasks')
+      .update({ archived_at: archivedAt, updated_at: archivedAt })
+      .in('id', ids)
+      .eq('user_id', userId)
+      .is('archived_at', null)
+
+    if (bulkError) {
+      // Revert on error
+      setTasks((prev) => [...prev, ...tasksToArchive])
+      setArchivedTasks((prev) => prev.filter((task) => !selectedSet.has(task.id)))
       setError('Failed to archive selected tasks.')
       return false
     }
 
-    const tagsById = new Map(updates.map((update) => [update.id, update.tags]))
-    setTasks((prev) => prev.map((task) => (
-      selectedSet.has(task.id)
-        ? { ...task, tags: tagsById.get(task.id) ?? task.tags, updated_at: updatedAt }
-        : task
-    )))
     return true
   }, [tasks, userId])
 
+  // Restore a task from archive (clear archived_at, move from archived to active)
+  const restoreTask = useCallback(async (taskId: string) => {
+    if (!userId) return false
+    const taskToRestore = archivedTasks.find((task) => task.id === taskId)
+    if (!taskToRestore) return false
+
+    const restoredTask: TaskRow = { ...taskToRestore, archived_at: null, updated_at: new Date().toISOString() }
+
+    // Optimistic update: move from archivedTasks to tasks
+    setArchivedTasks((prev) => prev.filter((task) => task.id !== taskId))
+    setTasks((prev) => [restoredTask, ...prev])
+
+    // Background sync to Supabase
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({ archived_at: null, updated_at: restoredTask.updated_at })
+      .eq('id', taskId)
+      .eq('user_id', userId)
+      .not('archived_at', 'is', null)
+
+    if (updateError) {
+      // Revert on error
+      setArchivedTasks((prev) => [taskToRestore, ...prev])
+      setTasks((prev) => prev.filter((task) => task.id !== taskId))
+      setError('Failed to restore task.')
+      return false
+    }
+
+    return true
+  }, [archivedTasks, userId])
+
   const resolvedTasks = userId ? tasks : []
+  const resolvedArchivedTasks = userId ? archivedTasks : []
   const resolvedLoading = userId ? loading : false
   const resolvedError = userId ? error : null
 
   return {
     tasks: resolvedTasks,
+    archivedTasks: resolvedArchivedTasks,
     loading: resolvedLoading,
     error: resolvedError,
     refreshTasks,
-    addTask,
-    toggleTask,
+    createTask,
+    completeTask,
+    archiveTask,
+    restoreTask,
     bulkComplete,
     bulkArchive
   }

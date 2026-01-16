@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Plus } from 'lucide-react-native';
-import FinanceCaptureModal from '../features/finance/FinanceCaptureModal';
+import FinanceCaptureModal from '../features/finance/capture/FinanceCaptureModal';
 import FinanceView from '../features/finance/FinanceView';
 import { useSettings } from '../hooks/useSettings';
 import FloatingLayout from '../components/layout/FloatingLayout';

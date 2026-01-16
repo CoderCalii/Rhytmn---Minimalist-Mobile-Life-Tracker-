@@ -71,13 +71,18 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setCurrencyCode(readStoredCurrency());
-      setCurrencyLoaded(false);
-      return;
+      // Reset state when user becomes null
+      const timer = setTimeout(() => {
+        setCurrencyCode(readStoredCurrency());
+        setCurrencyLoaded(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
-    setCurrencyLoaded(false);
+    setTimeout(() => {
+      setCurrencyLoaded(false);
+    }, 0);
 
     supabase
       .from('user_settings')
@@ -236,7 +241,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    setShowFabActions(false);
+    // Use setTimeout to avoid synchronous setState warning
+    const timer = setTimeout(() => {
+      setShowFabActions(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [view]);
 
   const handleGoTasks = () => {

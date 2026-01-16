@@ -1,11 +1,13 @@
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { Check } from 'lucide-react-native';
 import type { FinanceAccount } from '../../../../types';
+import { ACCOUNT_COLORS, type AccountColorId, getAccountColorHex } from '../../utils/financeUi';
 
 type AccountFormState = {
   name: string;
   balance: string;
-  color: string;
+  color: AccountColorId;
   lastFour: string;
 };
 
@@ -13,22 +15,21 @@ type AccountModalProps = {
   isOpen: boolean;
   editingAccount: FinanceAccount | null;
   accountForm: AccountFormState;
-  accountColors: string[];
   accountSaveError: string | null;
   accountSaving: boolean;
   onClose: () => void;
   onNameChange: (value: string) => void;
   onBalanceChange: (value: string) => void;
   onLastFourChange: (value: string) => void;
-  onColorChange: (color: string) => void;
+  onColorChange: (color: AccountColorId) => void;
   onSave: () => void;
+  onDelete?: () => void;
 };
 
 const AccountModal = ({
   isOpen,
   editingAccount,
   accountForm,
-  accountColors,
   accountSaveError,
   accountSaving,
   onClose,
@@ -36,7 +37,8 @@ const AccountModal = ({
   onBalanceChange,
   onLastFourChange,
   onColorChange,
-  onSave
+  onSave,
+  onDelete
 }: AccountModalProps) => {
   if (!isOpen) return null;
 
@@ -77,36 +79,113 @@ const AccountModal = ({
                 className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-semibold"
               />
             ) : (
-              <Text className="mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                Last four: {accountForm.lastFour}
-              </Text>
+              <TextInput
+                placeholder="Last 4 digits"
+                value={accountForm.lastFour}
+                onChangeText={onLastFourChange}
+                keyboardType="number-pad"
+                className="mt-3 w-full rounded-2xl bg-gray-50 px-4 py-3 text-sm font-semibold"
+              />
             )}
-            <View className="flex-row flex-wrap mt-4">
-              {accountColors.map((color) => (
-                <Pressable
-                  key={color}
-                  onPress={() => onColorChange(color)}
-                  className={`h-8 w-8 rounded-full mr-2 mb-2 ${color} ${accountForm.color === color ? 'ring-2 ring-black' : ''}`}
-                />
-              ))}
+            <View className="mt-4">
+              <Text className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Color</Text>
+              <View style={styles.colorPickerContainer}>
+                {ACCOUNT_COLORS.map((colorOption, index) => {
+                  const isSelected = accountForm.color === colorOption.id;
+                  const backgroundColor = getAccountColorHex(colorOption.id);
+                  return (
+                    <Pressable
+                      key={colorOption.id}
+                      onPress={() => onColorChange(colorOption.id)}
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor },
+                        isSelected && styles.colorSwatchSelected,
+                        index % 5 !== 0 && styles.colorSwatchMargin
+                      ]}
+                    >
+                      {isSelected && (
+                        <View style={styles.checkmarkContainer}>
+                          <View style={styles.checkmarkBackground}>
+                            <Check size={16} color="#ffffff" strokeWidth={3} />
+                          </View>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
             {accountSaveError ? (
-              <Text className="text-xs font-semibold text-rose-500">{accountSaveError}</Text>
+              <Text className="mt-3 text-xs font-semibold text-rose-500">{accountSaveError}</Text>
             ) : null}
           </View>
-          <Pressable
-            onPress={onSave}
-            disabled={accountSaving}
-            className="mt-6 w-full rounded-2xl bg-black py-3"
-          >
-            <Text className="text-center text-xs font-bold uppercase tracking-widest text-white">
-              {accountSaving ? 'Saving...' : editingAccount ? 'Save Account' : 'Create Account'}
-            </Text>
-          </Pressable>
+          <View className="mt-6 gap-3">
+            {editingAccount && onDelete ? (
+              <Pressable
+                onPress={onDelete}
+                disabled={accountSaving}
+                className="w-full rounded-2xl bg-rose-500 py-3"
+              >
+                <Text className="text-center text-xs font-bold uppercase tracking-widest text-white">
+                  {accountSaving ? 'Deleting...' : 'Delete Account'}
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={onSave}
+              disabled={accountSaving}
+              className="w-full rounded-2xl bg-black py-3"
+            >
+              <Text className="text-center text-xs font-bold uppercase tracking-widest text-white">
+                {accountSaving ? 'Saving...' : editingAccount ? 'Save Account' : 'Create Account'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  colorPickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  colorSwatch: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.8,
+    marginBottom: 12,
+  },
+  colorSwatchMargin: {
+    marginLeft: 12,
+  },
+  colorSwatchSelected: {
+    opacity: 1,
+    transform: [{ scale: 1.1 }],
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  checkmarkContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkmarkBackground: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    padding: 4,
+  },
+});
 
 export default AccountModal;

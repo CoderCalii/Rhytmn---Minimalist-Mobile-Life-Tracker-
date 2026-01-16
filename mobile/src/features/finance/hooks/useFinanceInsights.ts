@@ -345,7 +345,10 @@ const useFinanceInsights = ({
     const { start, end } = getRangeWindow(upcomingBillsRange);
     const sorted = activeBills
       .map((bill) => ({ bill, date: parseDateOnly(bill.nextDueDate) }))
-      .filter((item): item is { bill: BillItem; date: Date } => Boolean(item.date) && item.date >= start && item.date <= end)
+      .filter((item): item is { bill: BillItem; date: Date } => {
+        if (!item.date) return false;
+        return item.date >= start && item.date <= end;
+      })
       .sort((a, b) => a.date.getTime() - b.date.getTime())
       .slice(0, 3);
 

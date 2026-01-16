@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';

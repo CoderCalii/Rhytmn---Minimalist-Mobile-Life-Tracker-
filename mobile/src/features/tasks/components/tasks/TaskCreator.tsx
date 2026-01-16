@@ -4,19 +4,16 @@ import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Calendar, Check, Circle, Plus } from 'lucide-react-native';
 import { format } from 'date-fns';
-import type { TaskPriority } from './TaskPriorityDot';
 
 interface TaskCreatorProps {
   isAdding: boolean;
   value: string;
   dueDate: string;
   hasDeadline: boolean;
-  priority: TaskPriority;
   inputRef: RefObject<TextInput | null>;
   onChange: (value: string) => void;
   onDueDateChange: (value: string) => void;
   onToggleDeadline: (nextValue: boolean) => void;
-  onPriorityChange: (value: TaskPriority) => void;
   onStart: () => void;
   onCancel: () => void;
   onSubmit: () => void;
@@ -24,23 +21,15 @@ interface TaskCreatorProps {
   placeholder: string;
 }
 
-const priorities: { label: string; value: TaskPriority }[] = [
-  { label: 'High', value: 'high' },
-  { label: 'Medium', value: 'medium' },
-  { label: 'Low', value: 'low' }
-];
-
 export function TaskCreator({
   isAdding,
   value,
   dueDate,
   hasDeadline,
-  priority,
   inputRef,
   onChange,
   onDueDateChange,
   onToggleDeadline,
-  onPriorityChange,
   onStart,
   onCancel,
   onSubmit,
@@ -51,7 +40,11 @@ export function TaskCreator({
 
   useEffect(() => {
     if (!hasDeadline) {
-      setShowDatePicker(false);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setShowDatePicker(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [hasDeadline]);
 
@@ -104,26 +97,6 @@ export function TaskCreator({
         />
       </View>
       <View className="mt-4">
-        <View className="mt-3 flex-row flex-wrap">
-          {priorities.map((option) => (
-            <Pressable
-              key={option.value}
-              onPress={() => onPriorityChange(option.value)}
-              disabled={disabled}
-              className={`px-3 py-1 rounded-full mr-2 mb-2 ${
-                priority === option.value ? 'bg-black' : 'bg-gray-50'
-              }`}
-            >
-              <Text
-                className={`text-[10px] font-bold uppercase tracking-wider ${
-                  priority === option.value ? 'text-white' : 'text-gray-400'
-                }`}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
         <Pressable
           onPress={() => onToggleDeadline(!hasDeadline)}
           disabled={disabled}
@@ -165,7 +138,7 @@ export function TaskCreator({
                   onChange={handleDateChange}
                 />
               </View>
-            ) : showDatePicker ? (
+            ) : Platform.OS !== 'web' && showDatePicker ? (
               <DateTimePicker
                 value={hasValidDeadline ? parsedDeadline : new Date()}
                 mode="date"

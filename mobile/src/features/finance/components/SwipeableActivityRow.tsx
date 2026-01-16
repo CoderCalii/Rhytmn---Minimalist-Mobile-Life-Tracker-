@@ -1,4 +1,4 @@
-import { cloneElement, isValidElement, useRef, useState } from 'react';
+import { cloneElement, isValidElement, useMemo, useRef, useState } from 'react';
 import { PanResponder, Text, View } from 'react-native';
 import { formatCurrency } from '../../../utils/formatters';
 import type { ActivityTransaction } from '../types';
@@ -34,33 +34,37 @@ const SwipeableActivityRow = ({
     triggeredRef.current = false;
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-      onPanResponderGrant: (_, gestureState) => {
-        startRef.current = { x: gestureState.x0, y: gestureState.y0 };
-        triggeredRef.current = false;
-        setAction(null);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const dx = gestureState.dx;
-        const clamped = Math.max(Math.min(dx, 90), -90);
-        setOffset(clamped);
-        if (!triggeredRef.current && Math.abs(dx) > 60) {
-          triggeredRef.current = true;
-          triggerHaptic();
-          setAction(dx > 0 ? 'categorize' : 'delete');
-        }
-      },
-      onPanResponderRelease: () => {
-        if (action === 'delete') onDelete(transaction);
-        if (action === 'categorize') onCategorize(transaction);
-        reset();
-      },
-      onPanResponderTerminate: reset
-    })
-  ).current;
+  // PanResponder callbacks are event handlers, so accessing refs is safe
+  const panResponder = useMemo(
+    () =>
+      // eslint-disable-next-line react-hooks/refs
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        onPanResponderGrant: (_, gestureState) => {
+          startRef.current = { x: gestureState.x0, y: gestureState.y0 };
+          triggeredRef.current = false;
+          setAction(null);
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const dx = gestureState.dx;
+          const clamped = Math.max(Math.min(dx, 90), -90);
+          setOffset(clamped);
+          if (!triggeredRef.current && Math.abs(dx) > 60) {
+            triggeredRef.current = true;
+            triggerHaptic();
+            setAction(dx > 0 ? 'categorize' : 'delete');
+          }
+        },
+        onPanResponderRelease: () => {
+          if (action === 'delete') onDelete(transaction);
+          if (action === 'categorize') onCategorize(transaction);
+          reset();
+        },
+        onPanResponderTerminate: reset
+      }),
+    [action, onDelete, onCategorize, transaction]
+  );
 
   const backgroundTone =
     action === 'delete'

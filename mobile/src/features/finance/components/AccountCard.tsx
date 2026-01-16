@@ -3,10 +3,11 @@ import { Pressable, Text, View } from 'react-native';
 import { Pencil, Wallet } from 'lucide-react-native';
 import type { FinanceAccount } from '../../../types';
 import { formatCurrency } from '../../../utils/formatters';
+import { getAccountBackgroundClass, getAccountTextClass } from '../utils/financeUi';
 
 type AccountCardProps = {
   account: FinanceAccount;
-  textClassName: string;
+  textClassName?: string;
   style?: StyleProp<ViewStyle>;
   isActive?: boolean;
   onEdit?: (account: FinanceAccount) => void;
@@ -21,15 +22,18 @@ export function AccountCard({
   onEdit,
   currencyCode = 'USD'
 }: AccountCardProps) {
+  const backgroundClass = getAccountBackgroundClass(account.color);
+  const textClass = textClassName ?? getAccountTextClass(account.color);
+  
   return (
     <View
       style={style}
-      className={`absolute inset-0 p-8 rounded-[2.5rem] shadow-2xl ${account.color} ${textClassName} flex-col justify-between`}
+      className={`absolute inset-0 p-8 rounded-[2.5rem] shadow-2xl ${backgroundClass} flex-col justify-between`}
     >
       <View className="flex-row justify-between items-start">
         <View>
-          <Text className="text-[10px] opacity-60 font-black uppercase tracking-[0.2em]">{account.name}</Text>
-          <Text className="text-3xl font-black mt-2 tracking-tighter">
+          <Text className={`text-[10px] opacity-60 font-black uppercase tracking-[0.2em] ${textClass}`}>{account.name}</Text>
+          <Text className={`text-3xl font-black mt-2 tracking-tighter ${textClass}`}>
             {formatCurrency(account.balance, currencyCode)}
           </Text>
         </View>
@@ -48,7 +52,7 @@ export function AccountCard({
         </View>
       </View>
       <View className="flex-row justify-between items-end">
-        <Text className="font-mono tracking-[0.3em] text-[10px] opacity-50 underline">**** {account.lastFour}</Text>
+        <Text className={`font-mono tracking-[0.3em] text-[10px] opacity-50 underline ${textClass}`}>**** {account.lastFour}</Text>
         <View className="h-8 w-12 bg-white/10 rounded-lg border border-white/20" />
       </View>
     </View>

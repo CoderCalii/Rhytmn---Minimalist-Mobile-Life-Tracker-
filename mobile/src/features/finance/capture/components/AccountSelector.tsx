@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { FinanceAccount } from '../../../../types';
 
@@ -27,16 +26,6 @@ export const AccountSelector = ({
   projectedBalance,
   isOverdraft = false
 }: AccountSelectorProps) => {
-  useEffect(() => {
-    console.log('[AccountSelector] Mounted/Rendered', {
-      accountsCount: accounts.length,
-      selectedAccountId,
-      loading,
-      showBalance,
-      showProjectedBalance
-    });
-  });
-
   if (loading) {
     return <Text style={styles.emptyText}>Loading accounts...</Text>;
   }
@@ -44,17 +33,6 @@ export const AccountSelector = ({
   if (accounts.length === 0) {
     return <Text style={styles.emptyText}>No accounts found.</Text>;
   }
-
-  const handleAccountSelect = (accountId: string) => {
-    console.log('[AccountSelector] Account selected:', accountId);
-    try {
-      onAccountSelect(accountId);
-      console.log('[AccountSelector] onAccountSelect called successfully');
-    } catch (error) {
-      console.error('[AccountSelector] Error in onAccountSelect:', error);
-      console.error('[AccountSelector] Error stack:', error instanceof Error ? error.stack : 'No stack');
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -65,7 +43,7 @@ export const AccountSelector = ({
         return (
           <Pressable
             key={account.id}
-            onPress={() => handleAccountSelect(account.id)}
+            onPress={() => onAccountSelect(account.id)}
             disabled={isDisabled}
             style={[
               styles.accountButton,
@@ -141,3 +119,4 @@ const styles = StyleSheet.create({
     color: '#bfdbfe',
   },
 });
+

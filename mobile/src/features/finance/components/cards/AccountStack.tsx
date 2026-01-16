@@ -2,7 +2,6 @@ import { Pressable, Text, View } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import type { FinanceAccount } from '../../../../types';
 import { AccountCard } from '../AccountCard';
-import { getAccountTextClass } from '../../utils/financeUi';
 
 type AccountStackProps = {
   isSignedIn: boolean;
@@ -67,7 +66,6 @@ const AccountStack = ({
               key={account.id}
               account={account}
               style={getCardStyle(index)}
-              textClassName={getAccountTextClass(account.color)}
               isActive={index === activeAccountIndex}
               onEdit={onEditAccount}
               currencyCode={currencyCode}

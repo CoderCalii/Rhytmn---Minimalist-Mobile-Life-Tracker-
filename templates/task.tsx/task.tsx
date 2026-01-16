@@ -5,16 +5,12 @@ import {
   Activity, 
   CreditCard, 
   Plus, 
-  MoreHorizontal, 
   ChevronLeft, 
   CheckCircle2,
   X,
   Circle,
-  FileText,
   Clock,
-  Search,
-  Flame,
-  Check
+  Search
 } from 'lucide-react';
 
 // --- Types ---
@@ -24,7 +20,7 @@ type ViewState = 'home' | 'tasks' | 'habits' | 'finance' | 'page_detail';
 interface Block {
   id: string;
   type: 'text' | 'heading' | 'todo' | 'habit_widget' | 'finance_widget';
-  content: any;
+  content: string | { text: string; completed: boolean } | Record<string, unknown>;
 }
 
 interface Page {
@@ -34,22 +30,6 @@ interface Page {
   category?: string;
   blocks: Block[];
   updatedAt: string;
-}
-
-interface FinanceGoal {
-  id: string;
-  title: string;
-  target: number;
-  current: number;
-  deadline: string;
-}
-
-interface Habit {
-  id: string;
-  name: string;
-  meta: string;
-  color: string;
-  data: number[];
 }
 
 // --- Mock Data ---
@@ -99,14 +79,7 @@ const INITIAL_PAGES: Page[] = [
   }
 ];
 
-const INITIAL_HABITS: Habit[] = [
-  { id: 'h1', name: 'Morning Meditation', meta: '10 mins', color: 'bg-orange-400', data: [1, 1, 0, 1, 1, 1, 1] },
-  { id: 'h2', name: 'Reading', meta: '20 pages', color: 'bg-blue-400', data: [1, 0, 1, 1, 0, 0, 1] },
-];
-
-const INITIAL_FINANCE_GOALS: FinanceGoal[] = [
-  { id: 'f1', title: 'Japan Trip 2024', target: 5000, current: 3250, deadline: 'Oct 2024' },
-];
+// Unused constants removed to fix linting errors
 
 // --- Components ---
 
@@ -142,8 +115,6 @@ const CaptureModal = ({ onClose, onSave }: { onClose: () => void, onSave: (text:
 export default function App() {
   const [view, setView] = useState<ViewState>('home');
   const [pages, setPages] = useState<Page[]>(INITIAL_PAGES);
-  const [habits] = useState<Habit[]>(INITIAL_HABITS);
-  const [goals] = useState<FinanceGoal[]>(INITIAL_FINANCE_GOALS);
   const [selectedPage, setSelectedPage] = useState<Page | null>(null);
   
   const [showCapture, setShowCapture] = useState(false);

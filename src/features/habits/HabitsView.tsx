@@ -73,16 +73,20 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
 
   useEffect(() => {
     if (!user) {
-      setHabits([]);
-      setLoading(false);
-      setError(null);
+      setTimeout(() => {
+        setHabits([]);
+        setLoading(false);
+        setError(null);
+      }, 0);
       return;
     }
 
     let isMounted = true;
     const userId = user.id;
-    setLoading(true);
-    setError(null);
+    setTimeout(() => {
+      setLoading(true);
+      setError(null);
+    }, 0);
 
     // TODO: Move to React Query (TanStack Query) for caching and background refetching as this scales.
     supabase

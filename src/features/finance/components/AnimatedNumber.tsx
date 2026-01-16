@@ -18,14 +18,19 @@ const AnimatedNumber = ({ value, format, durationMs = 220, className }: Animated
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) {
       previousValueRef.current = value;
-      setDisplayValue(value);
+      // Use setTimeout to avoid synchronous setState warning
+      setTimeout(() => {
+        setDisplayValue(value);
+      }, 0);
       return;
     }
 
     const startValue = previousValueRef.current;
     const delta = value - startValue;
     if (delta === 0) {
-      setDisplayValue(value);
+      setTimeout(() => {
+        setDisplayValue(value);
+      }, 0);
       return;
     }
 

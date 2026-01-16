@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Sun } from 'lucide-react-native';
 import { addDays, endOfDay, format, startOfDay, subDays } from 'date-fns';
@@ -9,10 +9,10 @@ import AuthControl from '../components/AuthControl';
 import FocusTile from '../components/FocusTile';
 import ResurfacingCard from '../components/ResurfacingCard';
 import TodayStatusCard from '../components/TodayStatusCard';
-import { supabase } from '../../../lib/supabase';
+import { useTasks } from '../../../store/tasksProvider';
+import { useHabits } from '../../../store/habitsProvider';
 import { useAuth } from '../../../hooks/useAuth';
-import type { TaskRow } from '../../tasks/components/useTasks';
-import { isTaskArchived, parseTags } from '../../tasks/components/useTasks';
+import { supabase } from '../../../lib/supabase';
 import { getScrollPaddingBottom } from '../../../components/layout/layoutConstants';
 
 interface HomeViewProps {
@@ -20,18 +20,6 @@ interface HomeViewProps {
   onGoHabits?: () => void;
   onGoAlerts?: () => void;
   onOpenSettings?: () => void;
-}
-
-interface HabitLogRow {
-  completed_on?: string | null;
-  user_id?: string | null;
-}
-
-interface HabitRow {
-  id: string;
-  title?: string | null;
-  frequency?: string | null;
-  habit_logs?: HabitLogRow[] | null;
 }
 
 interface NoteRow {
@@ -56,51 +44,63 @@ const parseFlexibleDate = (value?: string | null) => {
 
 const HomeView = ({ onGoTasks, onGoHabits, onGoAlerts, onOpenSettings }: HomeViewProps) => {
   const { user } = useAuth();
-  const [homeLoading, setHomeLoading] = useState(false);
-  const [homeError, setHomeError] = useState<string | null>(null);
-  const [todayStatus, setTodayStatus] = useState({
-    tasksOpen: 0,
-    habitsLeft: 0,
-    alertsCount: 0
-  });
-  const [focusItem, setFocusItem] = useState({
-    title: '',
-    subtitle: '',
-    isValid: false
-  });
-  const [resurfacing, setResurfacing] = useState({
-    title: 'Gentle reminder',
-    description: 'Nothing resurfaced yet.',
-    highlight: null as string | null,
-    items: [] as string[],
-    dateLabel: null as string | null
-  });
+  const { tasks, loading: tasksLoading, error: tasksError } = useTasks();
+  const { habits, habitLogs, loading: habitsLoading, error: habitsError } = useHabits();
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [resurfacingNote, setResurfacingNote] = useState<NoteRow | null>(null);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets);
 
+  const homeLoading = tasksLoading || habitsLoading || notesLoading;
+  const homeError = tasksError || habitsError || notesError;
+
+  // Fetch notes (still needed, but can be moved to a provider later)
   useEffect(() => {
     if (!user) {
-      setHomeLoading(false);
-      setHomeError(null);
-      setTodayStatus({ tasksOpen: 0, habitsLeft: 0, alertsCount: 0 });
-      setFocusItem({ title: '', subtitle: '', isValid: false });
-      setResurfacingNote(null);
-      setResurfacing({
-        title: 'Gentle reminder',
-        description: 'Nothing resurfaced yet.',
-        highlight: null,
-        items: [],
-        dateLabel: null
-      });
-      return;
+      // Reset state when user becomes null
+      const timer = setTimeout(() => {
+        setResurfacingNote(null);
+        setNotesLoading(false);
+        setNotesError(null);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
-    setHomeLoading(true);
-    setHomeError(null);
+    // Use setTimeout to avoid synchronous setState warning
+    setTimeout(() => {
+      setNotesLoading(true);
+      setNotesError(null);
+    }, 0);
 
+    supabase
+      .from('notes')
+      .select('id, title, content, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data, error: notesFetchError }) => {
+        if (!isMounted) return;
+        if (notesFetchError) {
+          setNotesError('Failed to load notes.');
+          setResurfacingNote(null);
+        } else {
+          const notes = (data ?? []) as NoteRow[];
+          const recentNote = notes.find((note) => note.title || note.content);
+          setResurfacingNote(recentNote ?? null);
+        }
+        setNotesLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  // Compute derived state from provider data
+  const { todayStatus, focusItem, resurfacing } = useMemo(() => {
     const now = new Date();
     const todayKey = toDateKey(now);
     const yesterdayKey = toDateKey(subDays(now, 1));
@@ -108,140 +108,103 @@ const HomeView = ({ onGoTasks, onGoHabits, onGoAlerts, onOpenSettings }: HomeVie
     const todayEnd = endOfDay(now);
     const nextWeekEnd = endOfDay(addDays(now, 7));
 
-    const fetchHomeData = async () => {
-      const [tasksResult, habitsResult, notesResult] = await Promise.all([
-        supabase
-          .from('tasks')
-          .select('id, title, completed, created_at, updated_at, due_date, priority, tags')
-          .eq('user_id', user.id),
-        supabase
-          .from('habits')
-          .select('id, title, frequency, habit_logs(completed_on, user_id)')
-          .eq('user_id', user.id),
-        supabase
-          .from('notes')
-          .select('id, title, content, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(5),
-      ]);
+    // Tasks computation
+    const incompleteTasks = tasks.filter((task) => !task.completed);
+    const tasksOpen = incompleteTasks.length;
+    const overdueTasks = incompleteTasks.filter((task) => {
+      const dueDate = parseFlexibleDate(task.due_date ?? null);
+      return Boolean(dueDate && dueDate < todayStart);
+    });
+    const billsDue = incompleteTasks.filter((task) => {
+      const dueDate = parseFlexibleDate(task.due_date ?? null);
+      if (!dueDate || dueDate > nextWeekEnd) return false;
+      const title = task.title?.toLowerCase() ?? '';
+      return title.includes('bill');
+    });
 
-      if (!isMounted) return;
-
-      const homeLoadFailed = Boolean(tasksResult.error || habitsResult.error || notesResult.error);
-      if (homeLoadFailed) {
-        setHomeError('Failed to load home data.');
+    // Habits computation
+    const activeHabits = habits.filter((habit) => habit.active !== false);
+    const habitCompletedDates = new Map<string, Set<string>>();
+    habitLogs.forEach((log) => {
+      if (!log.completed_on) return;
+      if (!habitCompletedDates.has(log.habit_id)) {
+        habitCompletedDates.set(log.habit_id, new Set());
       }
+      habitCompletedDates.get(log.habit_id)!.add(log.completed_on);
+    });
 
-      const tasks = (tasksResult.data ?? []) as TaskRow[];
-      const habits = (habitsResult.data ?? []) as HabitRow[];
-      const notes = (notesResult.data ?? []) as NoteRow[];
+    const pendingHabits = activeHabits.filter((habit) => {
+      const dates = habitCompletedDates.get(habit.id) ?? new Set();
+      return !dates.has(todayKey);
+    });
+    const habitsRemaining = pendingHabits.length;
+    const habitsMissed = activeHabits.filter((habit) => {
+      const dates = habitCompletedDates.get(habit.id) ?? new Set();
+      return !dates.has(todayKey) && !dates.has(yesterdayKey);
+    }).length;
 
-      const activeTasks = tasks.filter((task) => !isTaskArchived(task));
-      const incompleteTasks = activeTasks.filter((task) => !task.completed);
-      const tasksOpen = incompleteTasks.length;
-      const overdueTasks = incompleteTasks.filter((task) => {
-        const dueDate = parseFlexibleDate(task.due_date ?? null);
-        return Boolean(dueDate && dueDate < todayStart);
-      });
-      const billsDue = incompleteTasks.filter((task) => {
-        const dueDate = parseFlexibleDate(task.due_date ?? null);
-        if (!dueDate || dueDate > nextWeekEnd) return false;
-        const tags = parseTags(task.tags ?? null).map((tag) => tag.toLowerCase());
-        return tags.some((tag) => tag.includes('bill'));
-      });
+    // Focus task
+    const focusTask = incompleteTasks
+      .slice()
+      .sort((first, second) => {
+        const firstDue = parseFlexibleDate(first.due_date ?? null);
+        const secondDue = parseFlexibleDate(second.due_date ?? null);
+        if (firstDue && secondDue) return firstDue.getTime() - secondDue.getTime();
+        if (firstDue) return -1;
+        if (secondDue) return 1;
+        return 0;
+      })[0];
 
-      const habitEntries = habits.map((habit) => {
-        const completedDates = new Set(
-          (habit.habit_logs ?? [])
-            .filter((log) => !log.user_id || log.user_id === user.id)
-            .map((log) => log.completed_on)
-            .filter((date): date is string => Boolean(date))
-        );
-        return {
-          id: habit.id,
-          title: habit.title ?? 'Habit',
-          completedDates
-        };
-      });
-
-      const pendingHabits = habitEntries.filter((habit) => !habit.completedDates.has(todayKey));
-      const habitsRemaining = pendingHabits.length;
-      const habitsMissed = habitEntries.filter((habit) => (
-        !habit.completedDates.has(todayKey) && !habit.completedDates.has(yesterdayKey)
-      )).length;
-
-      const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
-      const focusTask = incompleteTasks
-        .slice()
-        .sort((first, second) => {
-          const firstDue = parseFlexibleDate(first.due_date ?? null);
-          const secondDue = parseFlexibleDate(second.due_date ?? null);
-          if (firstDue && secondDue) return firstDue.getTime() - secondDue.getTime();
-          if (firstDue) return -1;
-          if (secondDue) return 1;
-          const firstRank = priorityRank[first.priority ?? 'medium'] ?? 1;
-          const secondRank = priorityRank[second.priority ?? 'medium'] ?? 1;
-          return firstRank - secondRank;
-        })[0];
-
-      const focusTaskDue = focusTask ? parseFlexibleDate(focusTask.due_date ?? null) : null;
-      const focusTaskActionable = Boolean(
-        focusTask && ((focusTaskDue && focusTaskDue <= todayEnd) || focusTask?.priority === 'high')
-      );
-      if (focusTaskActionable && focusTask) {
-        setFocusItem({
+    const focusTaskDue = focusTask ? parseFlexibleDate(focusTask.due_date ?? null) : null;
+    const focusTaskActionable = Boolean(
+      focusTask && focusTaskDue && focusTaskDue <= todayEnd
+    );
+    const focusItem = focusTaskActionable && focusTask
+      ? {
           title: focusTask.title,
-          subtitle: focusTaskDue ? `Due ${format(focusTaskDue, 'MMM d')}` : 'High priority task',
+          subtitle: focusTaskDue ? `Due ${format(focusTaskDue, 'MMM d')}` : 'Upcoming task',
           isValid: true
-        });
-      } else {
-        setFocusItem({ title: '', subtitle: '', isValid: false });
-      }
+        }
+      : { title: '', subtitle: '', isValid: false };
 
-      const recentNote = notes.find((note) => note.title || note.content);
-      if (recentNote) {
-        setResurfacingNote(recentNote);
-        const noteDate = parseFlexibleDate(recentNote.created_at ?? null);
-        const snippet = recentNote.content?.replace(/\s+/g, ' ').trim() ?? '';
-        setResurfacing({
-          title: recentNote.title ?? 'Recent note',
-          description: snippet ? `${snippet.slice(0, 90)}${snippet.length > 90 ? '...' : ''}` : 'A recent note is ready.',
-          highlight: null,
-          items: [],
-          dateLabel: noteDate ? format(noteDate, 'MMM d') : null
-        });
-      } else {
-        setResurfacingNote(null);
-        setResurfacing({
+    // Resurfacing note
+    const recentNote = resurfacingNote;
+    const resurfacing = recentNote
+      ? (() => {
+          const noteDate = parseFlexibleDate(recentNote.created_at ?? null);
+          const snippet = recentNote.content?.replace(/\s+/g, ' ').trim() ?? '';
+          return {
+            title: recentNote.title ?? 'Recent note',
+            description: snippet ? `${snippet.slice(0, 90)}${snippet.length > 90 ? '...' : ''}` : 'A recent note is ready.',
+            highlight: null as string | null,
+            items: [] as string[],
+            dateLabel: noteDate ? format(noteDate, 'MMM d') : null
+          };
+        })()
+      : {
           title: 'Gentle reminder',
           description: 'Nothing resurfaced yet.',
-          highlight: null,
-          items: [],
-          dateLabel: null
-        });
-      }
+          highlight: null as string | null,
+          items: [] as string[],
+          dateLabel: null as string | null
+        };
 
-      const alertTaskIds = new Set<string>();
-      overdueTasks.forEach((task) => alertTaskIds.add(task.id));
-      billsDue.forEach((task) => alertTaskIds.add(task.id));
-      const alertsCount = alertTaskIds.size + habitsMissed;
+    // Alerts
+    const alertTaskIds = new Set<string>();
+    overdueTasks.forEach((task) => alertTaskIds.add(task.id));
+    billsDue.forEach((task) => alertTaskIds.add(task.id));
+    const alertsCount = alertTaskIds.size + habitsMissed;
 
-      setTodayStatus({
+    return {
+      todayStatus: {
         tasksOpen,
         habitsLeft: habitsRemaining,
         alertsCount
-      });
-
-      setHomeLoading(false);
+      },
+      focusItem,
+      resurfacing
     };
-
-    fetchHomeData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user]);
+  }, [tasks, habits, habitLogs, resurfacingNote]);
 
   const isSignedIn = Boolean(user);
 

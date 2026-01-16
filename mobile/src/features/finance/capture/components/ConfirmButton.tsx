@@ -1,5 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { TransactionType } from './TransactionTypeSelector';
+import type { TransactionType } from '../capture.types';
 
 interface ConfirmButtonProps {
   type: TransactionType;
@@ -115,5 +115,4 @@ const styles = StyleSheet.create({
     color: '#dc2626',
   },
 });
-
 

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { listFinanceEntries, type FinanceEntryRow } from '../../../lib/financeEntries';
 import type { FinanceAccount, FinanceGoal, FinanceTransaction } from '../../../types';
-import { accountColors, goalColors } from '../constants';
+import { goalColors } from '../constants';
+import { normalizeAccountColor } from '../utils/financeUi';
 import { normalizeCadence } from '../utils/financeCadence';
 import { formatEntryDate } from '../utils/financeDates';
 import { getTransactionIconName } from '../utils/financeIcons';
@@ -66,7 +67,7 @@ const useFinanceData = ({ user, refreshToken = 0 }: UseFinanceDataParams) => {
         id: row.id,
         name: row.name ?? 'Account',
         balance: Number(row.balance) || 0,
-        color: row.color ?? accountColors[0],
+        color: normalizeAccountColor(row.color),
         lastFour: row.last_four ?? '0000'
       }))
     );
@@ -242,12 +243,41 @@ const useFinanceData = ({ user, refreshToken = 0 }: UseFinanceDataParams) => {
   );
 
   const updateAccount = useCallback(
-    async (id: string, payload: { name: string; color: string }) => {
+    async (id: string, payload: { name: string; color: string; lastFour?: string }) => {
       if (!user) return 'Sign in to save accounts.';
-      const { error } = await supabase.from('finance_accounts').update(payload).eq('id', id);
+
+      const updatePayload: Record<string, unknown> = {
+        name: payload.name,
+        color: payload.color,
+        user_id: user.id
+      };
+
+      if (payload.lastFour !== undefined) {
+        updatePayload.last_four = payload.lastFour;
+      }
+
+      const { error } = await supabase
+        .from('finance_accounts')
+        .update(updatePayload)
+        .eq('id', id);
 
       if (error) {
         return 'Failed to update account.';
+      }
+
+      fetchAccounts();
+      return null;
+    },
+    [fetchAccounts, user]
+  );
+
+  const deleteAccount = useCallback(
+    async (id: string) => {
+      if (!user) return 'Sign in to delete accounts.';
+      const { error } = await supabase.from('finance_accounts').delete().eq('id', id);
+
+      if (error) {
+        return 'Failed to delete account.';
       }
 
       fetchAccounts();
@@ -468,11 +498,13 @@ const useFinanceData = ({ user, refreshToken = 0 }: UseFinanceDataParams) => {
 
   useEffect(() => {
     if (!user) return;
-    fetchAccounts();
-    fetchGoals();
-    fetchEntries();
-    fetchBills();
-    fetchSubscriptions();
+    setTimeout(() => {
+      fetchAccounts();
+      fetchGoals();
+      fetchEntries();
+      fetchBills();
+      fetchSubscriptions();
+    }, 0);
   }, [fetchAccounts, fetchBills, fetchEntries, fetchGoals, fetchSubscriptions, refreshToken, user]);
 
   const hasUser = Boolean(user);
@@ -519,6 +551,7 @@ const useFinanceData = ({ user, refreshToken = 0 }: UseFinanceDataParams) => {
     fetchSubscriptions,
     createAccount,
     updateAccount,
+    deleteAccount,
     createGoal,
     deleteGoal,
     createBill,

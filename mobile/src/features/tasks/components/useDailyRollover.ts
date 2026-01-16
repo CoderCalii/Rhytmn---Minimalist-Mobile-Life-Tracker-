@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
 import { addDays, endOfDay, format, startOfDay } from 'date-fns'
 import { supabase } from '../../../lib/supabase'
 import type { TaskRow } from './useTasks'
@@ -8,6 +9,7 @@ interface UseDailyRolloverArgs {
   userId: string | null
   tasks: TaskRow[]
   notesReady: boolean
+  tasksReady: boolean
 }
 
 const parseTags = (value?: string | string[] | null) => {
@@ -172,31 +174,84 @@ const findNotesBacklogKey = async (userId: string, todayKey: string) => {
   return latestNoteDate ? toLocalDateKey(latestNoteDate) : null
 }
 
-export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRolloverArgs) {
+export function useDailyRollover({ userId, tasks, notesReady, tasksReady }: UseDailyRolloverArgs) {
   const [todayKey, setTodayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [isRollingOver, setIsRollingOver] = useState(false)
   const [rolloverCount, setRolloverCount] = useState(0)
+  const appState = useRef(AppState.currentState)
+  const lastProcessedTodayKey = useRef<string | null>(null)
 
+  // Update todayKey at midnight
   useEffect(() => {
     if (!userId) return
     const now = new Date()
     const nextMidnight = startOfDay(addDays(now, 1))
     const timeout = nextMidnight.getTime() - now.getTime()
     const timer = setTimeout(() => {
-      setTodayKey(format(new Date(), 'yyyy-MM-dd'))
+      const newTodayKey = format(new Date(), 'yyyy-MM-dd')
+      // Reset lastProcessedTodayKey when day changes to allow rollover to run
+      if (newTodayKey !== todayKey) {
+        lastProcessedTodayKey.current = null
+        setTodayKey(newTodayKey)
+        console.log('[useDailyRollover] Day changed at midnight, updated todayKey:', newTodayKey)
+      }
     }, timeout)
 
     return () => clearTimeout(timer)
   }, [todayKey, userId])
 
+  // Catch-up rollover on app resume
   useEffect(() => {
-    if (!userId || !notesReady || isRollingOver) return
+    if (!userId) return
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App came to foreground, recompute todayKey to catch up if day changed
+        const newTodayKey = format(new Date(), 'yyyy-MM-dd')
+        if (newTodayKey !== todayKey) {
+          // Reset lastProcessedTodayKey when day changes to allow rollover to run
+          lastProcessedTodayKey.current = null
+          setTodayKey(newTodayKey)
+          console.log('[useDailyRollover] App resumed, day changed, updated todayKey:', newTodayKey)
+        }
+      }
+      appState.current = nextAppState
+    }
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange)
+    return () => subscription.remove()
+  }, [userId, todayKey])
+
+  useEffect(() => {
+    // Gate: only run when all prerequisites are met
+    if (!userId || !notesReady || !tasksReady || isRollingOver) {
+      if (!tasksReady) {
+        console.log('[useDailyRollover] Skipping rollover: tasks not ready')
+      }
+      return
+    }
+
+    // Prevent redundant runs for the same todayKey
+    if (lastProcessedTodayKey.current === todayKey) {
+      console.log('[useDailyRollover] Already processed todayKey, skipping redundant run', { todayKey })
+      return
+    }
+
     const storageKey = `tasks:lastRollover:${userId}`
 
     const runRollover = async () => {
       setIsRollingOver(true)
+      let archiveSucceeded = false
       try {
         let stored = await AsyncStorage.getItem(storageKey)
+        console.log('[useDailyRollover] Starting rollover check', {
+          stored,
+          todayKey,
+          tasksLength: tasks.length,
+          tasksReady,
+          notesReady
+        })
+
         const { latestKey, hasUndatedTasks } = findTaskBacklogKey(tasks, todayKey)
         let backlogKey: string | null = latestKey
 
@@ -208,14 +263,18 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
         }
         if (!stored) {
           if (!backlogKey) {
+            // No backlog found, initialize to today
+            console.log('[useDailyRollover] No stored value and no backlog, initializing to todayKey')
             await AsyncStorage.setItem(storageKey, todayKey)
+            lastProcessedTodayKey.current = todayKey
             return
           }
           stored = backlogKey
         }
 
         if (stored === todayKey) {
-          await AsyncStorage.setItem(storageKey, todayKey)
+          console.log('[useDailyRollover] Already rolled over for today, skipping')
+          lastProcessedTodayKey.current = todayKey
           return
         }
 
@@ -227,6 +286,13 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
           if (!taskDateKey) return true
           return taskDateKey <= rolloverDateKey
         })
+
+        console.log('[useDailyRollover] Rollover analysis', {
+          rolloverDateKey,
+          tasksToArchiveLength: tasksToArchive.length,
+          tasksLength: tasks.length
+        })
+
         const rolloverDate = parseDate(`${rolloverDateKey}T00:00:00`) ?? new Date()
         const logTitle = `Daily Log - ${format(rolloverDate, 'MMM d, yyyy')}`
         const logContent = buildDailyLogContent(tasksToArchive)
@@ -244,6 +310,7 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
           createdAt: dayEndIso
         })
 
+        // Archive tasks if any need archiving
         if (tasksToArchive.length > 0) {
           // Attribute archival to the day being closed, not the execution time.
           const archivedAt = dayEndIso
@@ -257,23 +324,51 @@ export function useDailyRollover({ userId, tasks, notesReady }: UseDailyRollover
             return { id: task.id, error: updateError }
           }))
 
-          const failed = updates.find((update) => update.error)
-          if (failed) {
-            throw failed.error
+          const failed = updates.filter((update) => update.error)
+          if (failed.length > 0) {
+            const failedIds = failed.map((f) => f.id)
+            console.error('[useDailyRollover] Failed to archive tasks', {
+              failedIds,
+              errors: failed.map((f) => f.error)
+            })
+            throw new Error(`Failed to archive ${failed.length} task(s): ${failedIds.join(', ')}`)
           }
+
+          console.log('[useDailyRollover] Successfully archived tasks', {
+            count: tasksToArchive.length,
+            taskIds: tasksToArchive.map((t) => t.id)
+          })
+        } else {
+          console.log('[useDailyRollover] No tasks to archive for', rolloverDateKey)
         }
 
+        // Only commit AsyncStorage after successful archiving (or when no archiving needed and tasks are ready)
+        archiveSucceeded = true
         await AsyncStorage.setItem(storageKey, todayKey)
+        lastProcessedTodayKey.current = todayKey
+        console.log('[useDailyRollover] Rollover completed successfully', {
+          rolloverDateKey,
+          archivedCount: tasksToArchive.length,
+          newStored: todayKey
+        })
         setRolloverCount((prev) => prev + 1)
       } catch (error) {
-        console.error('Daily rollover failed', error)
+        console.error('[useDailyRollover] Daily rollover failed', {
+          error,
+          archiveSucceeded,
+          willNotCommit: !archiveSucceeded
+        })
+        // DO NOT set AsyncStorage to todayKey if archiving failed
+        if (archiveSucceeded) {
+          console.warn('[useDailyRollover] Archive succeeded but error occurred, AsyncStorage may be inconsistent')
+        }
       } finally {
         setIsRollingOver(false)
       }
     }
 
     runRollover()
-  }, [isRollingOver, notesReady, tasks, todayKey, userId])
+  }, [isRollingOver, notesReady, tasksReady, tasks, todayKey, userId])
 
   return { isRollingOver, todayKey, rolloverCount }
 }

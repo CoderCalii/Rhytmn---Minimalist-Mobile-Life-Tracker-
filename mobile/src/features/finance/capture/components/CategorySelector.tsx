@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { sanitizeText } from '../../../../utils/sanitize';
@@ -28,15 +27,6 @@ export const CategorySelector = ({
   onNewCategoryChange,
   type
 }: CategorySelectorProps) => {
-  useEffect(() => {
-    console.log('[CategorySelector] Mounted/Rendered', {
-      type,
-      categoriesCount: categories.length,
-      selectedCategory,
-      isEditing
-    });
-  });
-
   if (type !== 'income' && type !== 'expense') return null;
 
   return (
@@ -208,3 +198,4 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 });
+

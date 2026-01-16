@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabNavigator from './TabNavigator';
 import PageDetailScreen from '../screens/PageDetailScreen';
+import ArchivedTasksScreen from '../screens/ArchivedTasksScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -16,6 +17,11 @@ const RootNavigator = () => (
       name="PageDetail"
       component={PageDetailScreen}
       options={{ title: 'Details' }}
+    />
+    <Stack.Screen
+      name="ArchivedTasks"
+      component={ArchivedTasksScreen}
+      options={{ title: 'Archived Tasks' }}
     />
   </Stack.Navigator>
 );

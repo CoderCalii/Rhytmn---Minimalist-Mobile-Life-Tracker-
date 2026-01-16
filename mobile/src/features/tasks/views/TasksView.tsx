@@ -13,6 +13,8 @@ import {
 import type { TextInput } from 'react-native';
 import { differenceInHours, format, formatDistanceToNowStrict } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { sanitizeText } from '../../../utils/sanitize';
 import { useAuth } from '../../../hooks/useAuth';
 import { NoteCard } from '../components/notes/NoteCard';
@@ -23,14 +25,15 @@ import { TaskItem } from '../components/tasks/TaskItem';
 import { TasksHeader } from '../components/tasks/TasksHeader';
 import { TaskNoteComposer } from '../components/notes/TaskNoteComposer';
 import { TaskSearchBar } from '../components/tasks/TaskSearchBar';
-import type { TaskPriority } from '../components/tasks/TaskPriorityDot';
+import { HabitsTodaySection } from '../components/tasks/HabitsTodaySection';
+import { SwipeableTaskRow } from '../components/tasks/SwipeableTaskRow';
 import { useNotes } from '../components/useNotes';
 import type { NoteRow } from '../components/useNotes';
 import { useDailyRollover } from '../components/useDailyRollover';
 import { useTaskSelection } from '../components/useTaskSelection';
-import { useTasks, isTaskArchived } from '../components/useTasks';
-import { useTaskStats } from '../components/useTaskStats';
-import { useArchivedTasks } from '../components/useArchivedTasks';
+import { useTasks } from '../../../store/tasksProvider';
+import { useHabits } from '../../../store/habitsProvider';
+import type { RootStackParamList } from '../../../navigation/types';
 import { getScrollPaddingBottom } from '../../../components/layout/layoutConstants';
 
 type NoteFilter = 'All' | 'Ideas' | 'Personal';
@@ -90,6 +93,7 @@ const TasksView = ({
   onInlineAdded
 }: TasksViewProps) => {
   const { user, loading: authLoading } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
@@ -100,9 +104,7 @@ const TasksView = ({
   const [noteFilter, setNoteFilter] = useState<NoteFilter>('All');
   const [inlineDueDate, setInlineDueDate] = useState('');
   const [inlineHasDeadline, setInlineHasDeadline] = useState(false);
-  const [inlinePriority, setInlinePriority] = useState<TaskPriority>('medium');
   const [focusMode, setFocusMode] = useState<FocusMode>('tasks');
-  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets);
 
@@ -110,20 +112,44 @@ const TasksView = ({
   const normalizedNotesSearch = notesSearchQuery.trim().toLowerCase();
   const tasksFocused = focusMode === 'tasks';
   const notesFocused = focusMode === 'notes';
-  const tasksOpacity = useRef(new Animated.Value(tasksFocused ? 1 : 0)).current;
-  const notesOpacity = useRef(new Animated.Value(notesFocused ? 1 : 0)).current;
-  const tasksTranslate = useRef(new Animated.Value(tasksFocused ? 0 : 8)).current;
-  const notesTranslate = useRef(new Animated.Value(notesFocused ? 0 : 8)).current;
+  const tasksOpacityRef = useRef(new Animated.Value(tasksFocused ? 1 : 0));
+  const notesOpacityRef = useRef(new Animated.Value(notesFocused ? 1 : 0));
+  const tasksTranslateRef = useRef(new Animated.Value(tasksFocused ? 0 : 8));
+  const notesTranslateRef = useRef(new Animated.Value(notesFocused ? 0 : 8));
+  // Animated.Value refs are safe to access during render - they're stable references
+  const tasksOpacity = tasksOpacityRef.current;
+  const notesOpacity = notesOpacityRef.current;
+  const tasksTranslate = tasksTranslateRef.current;
+  const notesTranslate = notesTranslateRef.current;
   const {
     tasks,
     loading: tasksLoading,
     error: tasksError,
     refreshTasks,
-    addTask,
-    toggleTask,
+    createTask,
+    completeTask,
+    archiveTask,
     bulkComplete,
     bulkArchive
-  } = useTasks(userId);
+  } = useTasks();
+  const {
+    habits: allHabits,
+    loading: habitsLoading,
+    error: habitsError,
+    toggleHabitToday,
+    isHabitCompletedToday
+  } = useHabits();
+  
+  // Compute todayKey locally (yyyy-MM-dd format)
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  
+  // Derive today's habits from provider data
+  const todayHabits = allHabits.filter((habit) => habit.active !== false);
+  const completedHabitIds = new Set(
+    todayHabits
+      .filter((habit) => isHabitCompletedToday(habit.id))
+      .map((habit) => habit.id)
+  );
   const {
     notes,
     notesLoading,
@@ -140,10 +166,13 @@ const TasksView = ({
     exitSelectMode
   } = useTaskSelection();
   const notesReady = !notesLoading && !tasksLoading;
-  const { todayKey, rolloverCount } = useDailyRollover({
+  const tasksReady = !tasksLoading;
+  
+  const { rolloverCount } = useDailyRollover({
     userId,
     tasks,
-    notesReady
+    notesReady,
+    tasksReady
   });
 
   useEffect(() => {
@@ -183,13 +212,19 @@ const TasksView = ({
         useNativeDriver: true
       })
     ]).start();
-  }, [notesFocused, notesOpacity, notesTranslate, tasksFocused, tasksOpacity, tasksTranslate]);
+    // Animated.Value refs are stable and don't need to be in dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesFocused, tasksFocused]);
 
-  const activeTasks = tasks.filter((task) => !isTaskArchived(task));
-  const visibleTasks = activeTasks;
-  const remainingCount = activeTasks.filter((task) => !task.completed).length;
-  const taskStats = useTaskStats(tasks, todayKey);
-  const archivedGroups = useArchivedTasks(tasks);
+  // Split tasks into todayTasks and looseTasks
+  // All tasks from useTasks are already active (archived_at IS NULL)
+  const todayTasks = tasks.filter((task) => {
+    if (!task.due_date) return false;
+    const taskDateKey = toLocalDateKey(task.due_date);
+    return taskDateKey === todayKey;
+  });
+  
+  const looseTasks = tasks.filter((task) => task.due_date == null);
 
   const noteMatchesFilter = (note: NoteRow) => {
     if (noteFilter === 'All') return true;
@@ -237,7 +272,6 @@ const TasksView = ({
 
   const resetInlineMeta = () => {
     setInlineDueDate('');
-    setInlinePriority('medium');
     setInlineHasDeadline(false);
   };
 
@@ -256,11 +290,10 @@ const TasksView = ({
       return;
     }
 
-    const created = await addTask({
-      title: trimmed,
-      dueDate: inlineHasDeadline ? inlineDueDate || null : null,
-      priority: inlinePriority
-    });
+    const created = await createTask(
+      trimmed,
+      inlineHasDeadline ? inlineDueDate || null : null
+    );
 
     if (created) {
       onInlineChange('');
@@ -305,8 +338,8 @@ const TasksView = ({
     }
   };
 
-  const handleToggleTask = async (task: Parameters<typeof toggleTask>[0]) => {
-    await toggleTask(task);
+  const handleToggleTask = async (task: { id: string }) => {
+    await completeTask(task.id);
   };
 
   const handleBulkComplete = async () => {
@@ -325,16 +358,6 @@ const TasksView = ({
     }
   };
 
-  const formatArchiveDate = (value: string) => {
-    const parsed = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return value;
-    return format(parsed, 'MMM d, yyyy');
-  };
-
-  const formatMetric = (done: number, total: number) => {
-    if (total === 0) return '\u2014';
-    return `${done} / ${total}`;
-  };
 
   return (
     <ScrollView
@@ -355,51 +378,71 @@ const TasksView = ({
             tasksFocused ? { marginBottom: 40 } : { marginBottom: 0 }
           ]}
         >
-            <View className="mt-8">
+            {selectMode ? (
+              <View className="mb-6">
+                <TaskBulkActions
+                  selectedCount={selectedTaskIds.size}
+                  onComplete={handleBulkComplete}
+                  onArchive={handleBulkArchive}
+                  onExit={exitSelectMode}
+                />
+              </View>
+            ) : null}
+
+            {/* Today Tasks Section */}
+            <View className="mb-6">
               <View className="mb-4">
                 <View className="flex-row items-center justify-between px-1">
-                  <Text className="text-xs font-black uppercase tracking-widest text-gray-400">Current List</Text>
+                  <Text className="text-xs font-black uppercase tracking-widest text-gray-400">Today</Text>
                   <Text className="text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">
-                    {remainingCount} items
+                    {todayTasks.length} tasks
                   </Text>
                 </View>
               </View>
+              
+              {authLoading || tasksLoading ? (
+                <Text className="p-5 text-sm text-gray-400">Loading tasks...</Text>
+              ) : !user ? (
+                <Text className="p-5 text-sm text-gray-400">Sign in to view your tasks.</Text>
+              ) : tasksError ? (
+                <Text className="p-5 text-sm text-rose-500">{tasksError}</Text>
+              ) : todayTasks.length === 0 ? (
+                <Text className="p-5 text-sm text-gray-400">No tasks for today.</Text>
+              ) : (
+                <View className="gap-3">
+                  {todayTasks.map((task) => {
+                    const row = (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        timestampLabel={formatTimestamp(task.updated_at ?? task.created_at)}
+                        dueDateLabel={formatShortDate(task.due_date)}
+                        isSelected={selectedTaskIds.has(task.id)}
+                        isSelectMode={selectMode}
+                        onToggleComplete={() => handleToggleTask(task)}
+                        onToggleSelect={() => toggleSelection(task.id)}
+                        onLongPress={() => enterSelectMode(task.id)}
+                      />
+                    );
+
+                    if (selectMode) {
+                      return row;
+                    }
+
+                    return (
+                      <SwipeableTaskRow
+                        key={task.id}
+                        onArchive={() => {
+                          archiveTask(task.id);
+                        }}
+                      >
+                        {row}
+                      </SwipeableTaskRow>
+                    );
+                  })}
+                </View>
+              )}
             </View>
-
-            {selectMode ? (
-              <TaskBulkActions
-                selectedCount={selectedTaskIds.size}
-                onComplete={handleBulkComplete}
-                onArchive={handleBulkArchive}
-                onExit={exitSelectMode}
-              />
-            ) : null}
-
-            {authLoading || tasksLoading ? (
-              <Text className="p-5 text-sm text-gray-400">Loading tasks...</Text>
-            ) : !user ? (
-              <Text className="p-5 text-sm text-gray-400">Sign in to view your tasks.</Text>
-            ) : tasksError ? (
-              <Text className="p-5 text-sm text-rose-500">{tasksError}</Text>
-            ) : visibleTasks.length === 0 ? (
-              <Text className="p-5 text-sm text-gray-400">No tasks yet.</Text>
-            ) : (
-              <View className="gap-3">
-                {visibleTasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    timestampLabel={formatTimestamp(task.updated_at ?? task.created_at)}
-                    dueDateLabel={formatShortDate(task.due_date)}
-                    isSelected={selectedTaskIds.has(task.id)}
-                    isSelectMode={selectMode}
-                    onToggleComplete={() => handleToggleTask(task)}
-                    onToggleSelect={() => toggleSelection(task.id)}
-                    onLongPress={() => enterSelectMode(task.id)}
-                  />
-                ))}
-              </View>
-            )}
 
             <View className="mt-2">
               <TaskCreator
@@ -407,7 +450,6 @@ const TasksView = ({
                 value={inlineValue}
                 dueDate={inlineDueDate}
                 hasDeadline={inlineHasDeadline}
-                priority={inlinePriority}
                 inputRef={inlineInputRef}
                 onChange={onInlineChange}
                 onDueDateChange={setInlineDueDate}
@@ -417,7 +459,6 @@ const TasksView = ({
                     setInlineDueDate('');
                   }
                 }}
-                onPriorityChange={setInlinePriority}
                 onStart={handleStartInline}
                 onCancel={() => {
                   resetInlineMeta();
@@ -429,78 +470,76 @@ const TasksView = ({
               />
             </View>
 
-            <View className="mt-8 rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
-              <View className="flex-row flex-wrap">
-                <View className="w-1/2 mb-3">
-                  <Text className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Today</Text>
-                </View>
-                <View className="w-1/2 mb-3">
-                  <Text className="text-right text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    {formatMetric(taskStats.today.done, taskStats.today.total)}
-                  </Text>
-                </View>
-                <View className="w-1/2 mb-3">
-                  <Text className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Yesterday</Text>
-                </View>
-                <View className="w-1/2 mb-3">
-                  <Text className="text-right text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    {formatMetric(taskStats.yesterday.done, taskStats.yesterday.total)}
-                  </Text>
-                </View>
-                <View className="w-1/2 mb-3">
-                  <Text className="text-[11px] font-bold uppercase tracking-widest text-gray-400">This week</Text>
-                </View>
-                <View className="w-1/2 mb-3">
-                  <Text className="text-right text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    {formatMetric(taskStats.week.done, taskStats.week.total)}
-                  </Text>
-                </View>
-                <View className="w-1/2">
-                  <Text className="text-[11px] font-bold uppercase tracking-widest text-gray-400">This month</Text>
-                </View>
-                <View className="w-1/2">
-                  <Text className="text-right text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    {formatMetric(taskStats.month.done, taskStats.month.total)}
+            {/* Loose Notes Section */}
+            <View className="mt-8">
+              <View className="mb-4">
+                <View className="flex-row items-center justify-between px-1">
+                  <Text className="text-xs font-black uppercase tracking-widest text-gray-400">Loose Notes</Text>
+                  <Text className="text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">
+                    {looseTasks.length} items
                   </Text>
                 </View>
               </View>
+              
+              {looseTasks.length === 0 ? (
+                <Text className="p-5 text-sm text-gray-400">No loose notes yet.</Text>
+              ) : (
+                <View className="gap-3">
+                  {looseTasks.map((task) => {
+                    const row = (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        timestampLabel={formatTimestamp(task.updated_at ?? task.created_at)}
+                        dueDateLabel=""
+                        isSelected={selectedTaskIds.has(task.id)}
+                        isSelectMode={selectMode}
+                        onToggleComplete={() => handleToggleTask(task)}
+                        onToggleSelect={() => toggleSelection(task.id)}
+                        onLongPress={() => enterSelectMode(task.id)}
+                      />
+                    );
+
+                    if (selectMode) {
+                      return row;
+                    }
+
+                    return (
+                      <SwipeableTaskRow
+                        key={task.id}
+                        onArchive={() => {
+                          archiveTask(task.id);
+                        }}
+                      >
+                        {row}
+                      </SwipeableTaskRow>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
-            <View className="mt-6">
+            {/* Habits Today Section (read-only relative to tasks) */}
+            <HabitsTodaySection
+              habits={todayHabits.map((h) => ({ id: h.id, title: h.title, frequency: h.frequency }))}
+              completedHabitIds={completedHabitIds}
+              loading={habitsLoading}
+              error={habitsError}
+              onToggleHabit={toggleHabitToday}
+            />
+
+            {/* Archive Link */}
+            <View className="mt-8">
               <Pressable
-                onPress={() => setIsArchiveOpen((prev) => !prev)}
-                className="flex-row items-center"
+                onPress={() => {
+                  navigation.navigate('ArchivedTasks');
+                }}
+                className="flex-row items-center justify-center py-4 px-6 rounded-2xl border border-gray-200 bg-gray-50"
               >
-                <Text className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
-                  {isArchiveOpen ? 'v' : '>'} Archived Tasks
+                <Text className="text-sm font-bold uppercase tracking-widest text-gray-600">
+                  View Archive
                 </Text>
               </Pressable>
-
-              {isArchiveOpen ? (
-                <View className="mt-4 gap-4">
-                  {archivedGroups.length === 0 ? (
-                    <Text className="text-xs text-gray-400">No archived tasks yet.</Text>
-                  ) : (
-                    archivedGroups.map((group) => (
-                      <View key={group.dateKey} className="gap-2">
-                        <Text className={`text-[10px] font-bold uppercase tracking-widest ${group.isUnknown ? 'text-gray-300' : 'text-gray-400'}`}>
-                          {group.isUnknown ? group.label : formatArchiveDate(group.dateKey)}
-                        </Text>
-                        <View className="gap-2">
-                          {group.tasks.map((task) => (
-                            <View key={task.id} className="flex-row items-center justify-between">
-                              <Text className="font-medium text-gray-700">{task.title}</Text>
-                              <Text className={`text-[10px] font-bold uppercase tracking-widest ${task.completed ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                {task.completed ? 'Done' : 'Open'}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    ))
-                  )}
-                </View>
-              ) : null}
             </View>
         </Animated.View>
 

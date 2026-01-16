@@ -1,8 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import type { FinanceGoal } from '../../../../types';
-
-type GoalFlow = 'contribution' | 'withdrawal';
+import type { GoalFlow } from '../capture.types';
 
 interface GoalSelectorProps {
   goals: FinanceGoal[];
@@ -160,5 +159,4 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
-
 

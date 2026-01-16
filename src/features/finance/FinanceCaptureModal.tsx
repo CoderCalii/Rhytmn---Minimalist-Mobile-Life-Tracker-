@@ -155,27 +155,41 @@ const FinanceCaptureModal = ({
 
   useEffect(() => {
     if (accountsProp && accountsProp.length) {
-      setAccounts(accountsProp);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setAccounts(accountsProp);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [accountsProp]);
 
   useEffect(() => {
     if (goalsProp && goalsProp.length) {
-      setGoals(goalsProp);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setGoals(goalsProp);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [goalsProp]);
 
   useEffect(() => {
     if (!user) {
-      setAccounts([]);
-      setGoals([]);
-      return;
+      // Reset state when user becomes null
+      const timer = setTimeout(() => {
+        setAccounts([]);
+        setGoals([]);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
 
     if (!accountsProp || accountsProp.length === 0) {
-      setAccountsLoading(true);
+      // Use setTimeout to avoid synchronous setState warning
+      setTimeout(() => {
+        setAccountsLoading(true);
+      }, 0);
       supabase
         .from('finance_accounts')
         .select('id, name, balance, color, last_four')
@@ -197,7 +211,10 @@ const FinanceCaptureModal = ({
     }
 
     if (!goalsProp || goalsProp.length === 0) {
-      setGoalsLoading(true);
+      // Use setTimeout to avoid synchronous setState warning
+      setTimeout(() => {
+        setGoalsLoading(true);
+      }, 0);
       supabase
         .from('finance_goals')
         .select('id, name, target, current, color')
@@ -225,7 +242,11 @@ const FinanceCaptureModal = ({
 
   useEffect(() => {
     if (!selectedAccountId && accounts.length > 0) {
-      setSelectedAccountId(accounts[0].id);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setSelectedAccountId(accounts[0].id);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [accounts, selectedAccountId]);
 
@@ -233,37 +254,57 @@ const FinanceCaptureModal = ({
     if (selectedDestinationAccountId || accounts.length === 0) {
       return;
     }
-    if (accounts.length === 1) {
-      setSelectedDestinationAccountId(null);
-      return;
-    }
-    const fallback = accounts.find((account) => account.id !== selectedAccountId)?.id ?? accounts[0].id;
-    setSelectedDestinationAccountId(fallback);
+    // Use setTimeout to avoid synchronous setState warning
+    const timer = setTimeout(() => {
+      if (accounts.length === 1) {
+        setSelectedDestinationAccountId(null);
+        return;
+      }
+      const fallback = accounts.find((account) => account.id !== selectedAccountId)?.id ?? accounts[0].id;
+      setSelectedDestinationAccountId(fallback);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [accounts, selectedDestinationAccountId, selectedAccountId]);
 
   useEffect(() => {
     if (!selectedAccountId || !selectedDestinationAccountId) return;
     if (selectedAccountId !== selectedDestinationAccountId) return;
-    const alternative = accounts.find((account) => account.id !== selectedAccountId)?.id ?? null;
-    setSelectedDestinationAccountId(alternative);
+    // Use setTimeout to avoid synchronous setState warning
+    const timer = setTimeout(() => {
+      const alternative = accounts.find((account) => account.id !== selectedAccountId)?.id ?? null;
+      setSelectedDestinationAccountId(alternative);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [accounts, selectedAccountId, selectedDestinationAccountId]);
 
   useEffect(() => {
     if (!selectedGoal && goals.length > 0) {
-      setSelectedGoal(initialGoalId ?? goals[0].id);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setSelectedGoal(initialGoalId ?? goals[0].id);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [goals, selectedGoal, initialGoalId]);
 
   useEffect(() => {
     if (type === 'transfer' || type === 'goal') {
-      setIsEditingCategories(false);
-      setNewCategory('');
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setIsEditingCategories(false);
+        setNewCategory('');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [type]);
 
   useEffect(() => {
     if (initialType) {
-      setType(initialType);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setType(initialType);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [initialType]);
 

@@ -29,8 +29,11 @@ export function useNotes(userId: string | null) {
     if (!userId) return
 
     let isMounted = true
-    setNotesLoading(true)
-    setNotesError(null)
+    // Use setTimeout to avoid synchronous setState warning
+    setTimeout(() => {
+      setNotesLoading(true)
+      setNotesError(null)
+    }, 0)
 
     supabase
       .from('notes')

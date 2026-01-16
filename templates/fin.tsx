@@ -1,17 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Home, 
-  Activity, 
   CreditCard, 
   Plus, 
-  ChevronLeft, 
   X, 
   Zap, 
   Wallet, 
   TrendingUp, 
   Check, 
   Search, 
-  ShoppingBag, 
   Utensils, 
   Car, 
   Tv 

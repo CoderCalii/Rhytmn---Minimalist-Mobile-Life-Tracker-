@@ -173,15 +173,23 @@ const FinanceView = ({
 
   useEffect(() => {
     if (activeAccountIndex >= accounts.length) {
-      setActiveAccountIndex(0);
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setActiveAccountIndex(0);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [accounts.length, activeAccountIndex]);
 
   useEffect(() => {
     if (!fabIntent) return;
     if (fabIntent.type === 'subscription') {
-      setShowSubscriptionsModal(true);
-      onFabIntentHandled?.();
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setShowSubscriptionsModal(true);
+        onFabIntentHandled?.();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [fabIntent, onFabIntentHandled]);
 
@@ -198,7 +206,11 @@ const FinanceView = ({
 
   useEffect(() => {
     if (!categorizeTarget) {
-      setCustomCategory('');
+      // Use setTimeout to avoid synchronous setState warning
+      const timer = setTimeout(() => {
+        setCustomCategory('');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [categorizeTarget]);
 

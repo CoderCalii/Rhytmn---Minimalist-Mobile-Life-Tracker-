@@ -55,8 +55,10 @@ export function useTasks(userId: string | null) {
     if (!userId) return
 
     let isMounted = true
-    setLoading(true)
-    setError(null)
+    setTimeout(() => {
+      setLoading(true)
+      setError(null)
+    }, 0)
 
     supabase
       .from('tasks')

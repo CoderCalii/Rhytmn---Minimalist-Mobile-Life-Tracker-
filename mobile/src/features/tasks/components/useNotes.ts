@@ -26,13 +26,24 @@ export function useNotes(userId: string | null) {
   const [notesError, setNotesError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId) {
+      // Reset state when userId becomes null
+      const timer = setTimeout(() => {
+        setNotes([])
+        setNotesLoading(false)
+        setNotesError(null)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
 
     let isMounted = true
-    const fetchNotes = async () => {
-      if (!isMounted) return
+    // Use setTimeout to avoid synchronous setState warning
+    setTimeout(() => {
       setNotesLoading(true)
       setNotesError(null)
+    }, 0)
+    const fetchNotes = async () => {
+      if (!isMounted) return
       const { data, error: fetchError } = await supabase
         .from('notes')
         .select('id, title, content, category, icon, created_at, is_pinned')

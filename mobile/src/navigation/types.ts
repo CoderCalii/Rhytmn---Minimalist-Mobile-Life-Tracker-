@@ -1,6 +1,7 @@
 export type RootStackParamList = {
   Tabs: undefined;
   PageDetail: { pageId?: string } | undefined;
+  ArchivedTasks: undefined;
 };
 
 export type TabParamList = {

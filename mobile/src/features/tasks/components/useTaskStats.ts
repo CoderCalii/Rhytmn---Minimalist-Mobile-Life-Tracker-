@@ -1,18 +1,11 @@
 import { useMemo } from 'react'
-import { endOfDay, startOfDay, startOfMonth, startOfWeek, subDays } from 'date-fns'
-import { isTaskArchived } from './useTasks'
+import { endOfDay, startOfDay } from 'date-fns'
 import type { TaskRow } from './useTasks'
 
-interface TaskStatsEntry {
-  done: number
-  total: number
-}
-
-const parseLocalDateKey = (value?: string | null) => {
-  if (!value) return null
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return null
-  return new Date(year, month - 1, day)
+export interface TaskStats {
+  activeCount: number
+  completedToday: number
+  archivedCount: number
 }
 
 const parseDate = (value?: string | null) => {
@@ -22,45 +15,40 @@ const parseDate = (value?: string | null) => {
   return parsed
 }
 
-const countInRange = (
-  tasks: TaskRow[],
-  start: Date,
-  end: Date,
-  fallbackDate: Date | null
-): TaskStatsEntry => {
-  let done = 0
-  let total = 0
-
-  tasks.forEach((task) => {
-    if (isTaskArchived(task)) return
-    const effectiveDate = parseDate(task.updated_at ?? task.created_at ?? null) ?? fallbackDate
-    if (!effectiveDate) return
-    if (effectiveDate < start || effectiveDate > end) return
-    total += 1
-    if (task.completed) {
-      done += 1
-    }
-  })
-
-  return { done, total }
-}
-
-export function useTaskStats(tasks: TaskRow[], fallbackDateKey?: string | null) {
+/**
+ * Compute lightweight stats for the tasks list using completed_at and archived_at:
+ * - activeCount: tasks where archived_at IS NULL
+ * - completedToday: tasks completed today (by completed_at) and not archived
+ * - archivedCount: tasks where archived_at IS NOT NULL
+ *
+ * Note: if you pass only active tasks into this hook, archivedCount will be 0.
+ */
+export function useTaskStats(tasks: TaskRow[]): TaskStats {
   return useMemo(() => {
     const now = new Date()
     const todayStart = startOfDay(now)
     const todayEnd = endOfDay(now)
-    const yesterdayStart = startOfDay(subDays(now, 1))
-    const yesterdayEnd = endOfDay(subDays(now, 1))
-    const weekStart = startOfWeek(now)
-    const monthStart = startOfMonth(now)
-    const fallbackDate = parseLocalDateKey(fallbackDateKey)
 
-    return {
-      today: countInRange(tasks, todayStart, todayEnd, fallbackDate),
-      yesterday: countInRange(tasks, yesterdayStart, yesterdayEnd, fallbackDate),
-      week: countInRange(tasks, weekStart, todayEnd, fallbackDate),
-      month: countInRange(tasks, monthStart, todayEnd, fallbackDate)
-    }
-  }, [fallbackDateKey, tasks])
+    let activeCount = 0
+    let completedToday = 0
+    let archivedCount = 0
+
+    tasks.forEach((task) => {
+      const isArchived = task.archived_at != null
+      if (isArchived) {
+        archivedCount += 1
+        return
+      }
+
+      activeCount += 1
+
+      if (!task.completed || !task.completed_at) return
+      const completedAt = parseDate(task.completed_at)
+      if (!completedAt) return
+      if (completedAt < todayStart || completedAt > todayEnd) return
+      completedToday += 1
+    })
+
+    return { activeCount, completedToday, archivedCount }
+  }, [tasks])
 }

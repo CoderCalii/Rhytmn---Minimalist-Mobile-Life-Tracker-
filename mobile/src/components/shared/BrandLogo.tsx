@@ -1,11 +1,10 @@
 import { Image, View, useColorScheme } from 'react-native';
+import logoLight from '../../assets/logos/logo-light.png';
+import logoDark from '../../assets/logos/logo-dark.png';
 
 interface BrandLogoProps {
   className?: string;
 }
-
-const logoLight = require('../../assets/logos/logo-light.png');
-const logoDark = require('../../assets/logos/logo-dark.png');
 
 const BrandLogo = ({ className = '' }: BrandLogoProps) => {
   const scheme = useColorScheme();

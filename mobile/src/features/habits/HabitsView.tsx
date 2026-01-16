@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Flame } from 'lucide-react-native';
 import { eachDayOfInterval, endOfMonth, format, getDaysInMonth, getDaysInYear, startOfMonth, subDays } from 'date-fns';
 import { BlurView } from 'expo-blur';
@@ -7,21 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppHeader from '../../components/AppHeader';
 import BrandLogo from '../../components/BrandLogo';
 import type { TimeScale } from '../../types';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
+import { useHabits } from '../../store/habitsProvider';
 import { getScrollPaddingBottom } from '../../components/layout/layoutConstants';
-
-interface HabitLogRow {
-  completed_on: string | null;
-  user_id?: string | null;
-}
-
-interface HabitRow {
-  id: string;
-  title: string;
-  frequency?: string | null;
-  habit_logs?: HabitLogRow[] | null;
-}
 
 interface HabitEntry {
   id: string;
@@ -29,10 +16,6 @@ interface HabitEntry {
   meta: string;
   color: string;
   completedDates: Set<string>;
-}
-
-interface HabitsViewProps {
-  refreshToken?: number;
 }
 
 const toDateKey = (date: Date) => format(date, 'yyyy-MM-dd');
@@ -61,12 +44,9 @@ const getCurrentStreak = (dates: Set<string>, startDate: Date) => {
   return streak;
 };
 
-const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
+const HabitsView = () => {
   const [scale, setScale] = useState<TimeScale>('Daily');
-  const { user, loading: authLoading } = useAuth();
-  const [habits, setHabits] = useState<HabitEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { habits: habitsData, habitLogs, loading, error, toggleHabitToday } = useHabits();
   const [monthGridWidth, setMonthGridWidth] = useState(0);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets) + 32;
@@ -83,105 +63,24 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
     ? (monthGridWidth - MONTH_GRID_GAP * 6) / 7
     : 0;
 
-  useEffect(() => {
-    if (!user) {
-      setHabits([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+  // Transform provider data into HabitEntry format
+  const habits = useMemo<HabitEntry[]>(() => {
+    return habitsData.map((habit) => {
+      const completedDates = new Set(
+        habitLogs
+          .filter((log) => log.habit_id === habit.id && log.completed_on)
+          .map((log) => log.completed_on!)
+      );
 
-    let isMounted = true;
-    const userId = user.id;
-    setLoading(true);
-    setError(null);
-
-    supabase
-      .from('habits')
-      .select('id, title, frequency, habit_logs(completed_on, user_id)')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .then(({ data, error: fetchError }) => {
-        if (!isMounted) return;
-        if (fetchError) {
-          setError('Failed to load habits.');
-          setHabits([]);
-        } else {
-          const rows = (data ?? []) as HabitRow[];
-          setHabits(rows.map((row) => {
-            const completedDates = new Set(
-              (row.habit_logs ?? [])
-                .filter((log) => !log.user_id || log.user_id === userId)
-                .map((log) => log.completed_on)
-                .filter((date): date is string => Boolean(date))
-            );
-
-            return {
-              id: row.id,
-              name: row.title,
-              meta: row.frequency ?? 'Daily',
-              color: 'bg-black',
-              completedDates
-            };
-          }));
-        }
-        setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user, refreshToken]);
-
-  const toggleHabit = async (habitId: string) => {
-    if (!user) {
-      setError('Sign in to update habits.');
-      return;
-    }
-
-    const habit = habits.find((entry) => entry.id === habitId);
-    if (!habit) return;
-
-    const dateKey = toDateKey(new Date());
-    const wasCompleted = habit.completedDates.has(dateKey);
-    const previousDates = new Set(habit.completedDates);
-
-    setError(null);
-    setHabits((prev) => prev.map((entry) => {
-      if (entry.id !== habitId) return entry;
-      const nextDates = new Set(entry.completedDates);
-      if (wasCompleted) {
-        nextDates.delete(dateKey);
-      } else {
-        nextDates.add(dateKey);
-      }
-      return { ...entry, completedDates: nextDates };
-    }));
-
-    const { error: toggleError } = wasCompleted
-      ? await supabase
-          .from('habit_logs')
-          .delete()
-          .eq('habit_id', habitId)
-          .eq('completed_on', dateKey)
-          .eq('user_id', user.id)
-      : await supabase
-          .from('habit_logs')
-          .insert({
-            habit_id: habitId,
-            user_id: user.id,
-            completed_on: dateKey,
-            completed_at: new Date().toISOString()
-          });
-
-    if (toggleError) {
-      setHabits((prev) => prev.map((entry) => (
-        entry.id === habitId ? { ...entry, completedDates: new Set(previousDates) } : entry
-      )));
-      setError('Failed to update habit.');
-      Alert.alert('Update failed', 'Failed to update habit.');
-    }
-  };
+      return {
+        id: habit.id,
+        name: habit.title,
+        meta: habit.frequency ?? 'Daily',
+        color: 'bg-black',
+        completedDates
+      };
+    });
+  }, [habitsData, habitLogs]);
 
   const renderScaleContent = () => {
     switch (scale) {
@@ -208,7 +107,7 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
                     </View>
                   </View>
                   <Pressable
-                    onPress={() => toggleHabit(habit.id)}
+                    onPress={() => toggleHabitToday(habit.id)}
                     className={`w-10 h-10 rounded-xl items-center justify-center ${isCompletedToday ? 'bg-black' : 'bg-gray-100'}`}
                   >
                     <Check size={20} color={isCompletedToday ? '#ffffff' : '#d1d5db'} />
@@ -380,13 +279,9 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
       </View>
 
       <View className="px-6">
-        {authLoading || loading ? (
+        {loading ? (
           <View className="p-4 bg-gray-50 rounded-2xl">
             <Text className="text-sm text-gray-400">Loading habits...</Text>
-          </View>
-        ) : !user ? (
-          <View className="p-4 bg-gray-50 rounded-2xl">
-            <Text className="text-sm text-gray-400">Sign in to view your habits.</Text>
           </View>
         ) : error ? (
           <View className="p-4 bg-rose-50 rounded-2xl">

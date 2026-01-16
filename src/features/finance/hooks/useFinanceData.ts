@@ -468,25 +468,30 @@ const useFinanceData = ({ user, refreshToken = 0 }: UseFinanceDataParams) => {
 
   useEffect(() => {
     if (!user) {
-      setAccounts([]);
-      setGoals([]);
-      setTransactions([]);
-      setRawEntries([]);
-      setBills([]);
-      setSubscriptions([]);
-      setAccountsLoading(false);
-      setGoalsLoading(false);
-      setEntriesLoading(false);
-      setBillsLoading(false);
-      setSubscriptionsLoading(false);
-      return;
+      // Reset state when user becomes null
+      const timer = setTimeout(() => {
+        setAccounts([]);
+        setGoals([]);
+        setTransactions([]);
+        setRawEntries([]);
+        setBills([]);
+        setSubscriptions([]);
+        setAccountsLoading(false);
+        setGoalsLoading(false);
+        setEntriesLoading(false);
+        setBillsLoading(false);
+        setSubscriptionsLoading(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
-    fetchAccounts();
-    fetchGoals();
-    fetchEntries();
-    fetchBills();
-    fetchSubscriptions();
+    setTimeout(() => {
+      fetchAccounts();
+      fetchGoals();
+      fetchEntries();
+      fetchBills();
+      fetchSubscriptions();
+    }, 0);
   }, [fetchAccounts, fetchBills, fetchEntries, fetchGoals, fetchSubscriptions, refreshToken, user]);
 
   return {

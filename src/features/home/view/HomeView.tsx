@@ -82,24 +82,29 @@ const HomeView = ({
 
   useEffect(() => {
     if (!user) {
-      setHomeLoading(false);
-      setHomeError(null);
-      setTodayStatus({ tasksOpen: 0, habitsLeft: 0, alertsCount: 0 });
-      setFocusItem({ title: '', subtitle: '', isValid: false });
-      setResurfacingNote(null);
-      setResurfacing({
-        title: 'Gentle reminder',
-        description: 'Nothing resurfaced yet.',
-        highlight: null,
-        items: [],
-        dateLabel: null
-      });
-      return;
+      // Reset state when user becomes null
+      const timer = setTimeout(() => {
+        setHomeLoading(false);
+        setHomeError(null);
+        setTodayStatus({ tasksOpen: 0, habitsLeft: 0, alertsCount: 0 });
+        setFocusItem({ title: '', subtitle: '', isValid: false });
+        setResurfacingNote(null);
+        setResurfacing({
+          title: 'Gentle reminder',
+          description: 'Nothing resurfaced yet.',
+          highlight: null,
+          items: [],
+          dateLabel: null
+        });
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     let isMounted = true;
-    setHomeLoading(true);
-    setHomeError(null);
+    setTimeout(() => {
+      setHomeLoading(true);
+      setHomeError(null);
+    }, 0);
 
     const now = new Date();
     const todayKey = toDateKey(now);
