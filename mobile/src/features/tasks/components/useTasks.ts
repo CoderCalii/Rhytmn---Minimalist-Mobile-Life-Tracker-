@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../../../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../../../lib/supabase'
 
 export interface TaskRow {
   id: string
@@ -31,6 +31,17 @@ export function useTasksInternal(userId: string | null) {
       return () => clearTimeout(timer)
     }
 
+    // Skip Supabase calls if not configured
+    if (!isSupabaseConfigured) {
+      const timer = setTimeout(() => {
+        setTasks([])
+        setArchivedTasks([])
+        setLoading(false)
+        setError(null)
+      }, 0)
+      return () => clearTimeout(timer)
+    }
+
     let isMounted = true
     // Use setTimeout to avoid synchronous setState warning
     setTimeout(() => {
@@ -39,26 +50,36 @@ export function useTasksInternal(userId: string | null) {
     }, 0)
     const fetchTasks = async () => {
       if (!isMounted) return
-      const { data, error: fetchError } = await supabase
-        .from('tasks')
-        .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('tasks')
+          .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
 
-      if (!isMounted) return
-      if (fetchError) {
+        if (!isMounted) return
+        if (fetchError) {
+          setError('Failed to load tasks.')
+          setTasks([])
+          setArchivedTasks([])
+        } else {
+          const allTasks = (data ?? []) as TaskRow[]
+          // Split into active and archived
+          const active = allTasks.filter((task) => !task.archived_at)
+          const archived = allTasks.filter((task) => task.archived_at != null)
+          setTasks(active)
+          setArchivedTasks(archived)
+        }
+      } catch (err) {
+        console.warn('[useTasks] Failed to fetch tasks:', err)
+        if (!isMounted) return
         setError('Failed to load tasks.')
         setTasks([])
         setArchivedTasks([])
-      } else {
-        const allTasks = (data ?? []) as TaskRow[]
-        // Split into active and archived
-        const active = allTasks.filter((task) => !task.archived_at)
-        const archived = allTasks.filter((task) => task.archived_at != null)
-        setTasks(active)
-        setArchivedTasks(archived)
       }
-      setLoading(false)
+      if (isMounted) {
+        setLoading(false)
+      }
     }
 
     fetchTasks()
@@ -69,25 +90,32 @@ export function useTasksInternal(userId: string | null) {
   }, [userId])
 
   const refreshTasks = useCallback(async () => {
-    if (!userId) return
+    if (!userId || !isSupabaseConfigured) return
     setLoading(true)
     setError(null)
-    const { data, error: fetchError } = await supabase
-      .from('tasks')
-      .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('tasks')
+        .select('id, title, completed, completed_at, created_at, updated_at, due_date, archived_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
 
-    if (fetchError) {
+      if (fetchError) {
+        setError('Failed to load tasks.')
+        setTasks([])
+        setArchivedTasks([])
+      } else {
+        const allTasks = (data ?? []) as TaskRow[]
+        const active = allTasks.filter((task) => !task.archived_at)
+        const archived = allTasks.filter((task) => task.archived_at != null)
+        setTasks(active)
+        setArchivedTasks(archived)
+      }
+    } catch (err) {
+      console.warn('[useTasks] Failed to refresh tasks:', err)
       setError('Failed to load tasks.')
       setTasks([])
       setArchivedTasks([])
-    } else {
-      const allTasks = (data ?? []) as TaskRow[]
-      const active = allTasks.filter((task) => !task.archived_at)
-      const archived = allTasks.filter((task) => task.archived_at != null)
-      setTasks(active)
-      setArchivedTasks(archived)
     }
     setLoading(false)
   }, [userId])

@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
 type CurrencyCode = 'USD' | 'PHP';
@@ -44,20 +44,36 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('currency_code')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Only try to fetch from Supabase if it's configured
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('user_settings')
+            .select('currency_code')
+            .eq('user_id', user.id)
+            .maybeSingle();
 
-      if (!isMounted) return;
+          if (!isMounted) return;
 
-      if (error) {
+          if (error) {
+            const stored = await readStoredCurrency();
+            if (!isMounted) return;
+            setCurrencyCode(stored);
+          } else {
+            setCurrencyCode(data?.currency_code === 'PHP' ? 'PHP' : 'USD');
+          }
+        } catch (err) {
+          // Fallback to local storage if Supabase call fails
+          console.warn('[SettingsProvider] Failed to load from Supabase, using local storage:', err);
+          const stored = await readStoredCurrency();
+          if (!isMounted) return;
+          setCurrencyCode(stored);
+        }
+      } else {
+        // If Supabase is not configured, just use local storage
         const stored = await readStoredCurrency();
         if (!isMounted) return;
         setCurrencyCode(stored);
-      } else {
-        setCurrencyCode(data?.currency_code === 'PHP' ? 'PHP' : 'USD');
       }
       setLoading(false);
     };
@@ -82,10 +98,18 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   }, [currencyCode]);
 
   useEffect(() => {
-    if (!user || loading) return;
-    supabase
-      .from('user_settings')
-      .upsert({ user_id: user.id, currency_code: currencyCode }, { onConflict: 'user_id' });
+    if (!user || loading || !isSupabaseConfigured) return;
+    // Silently fail if Supabase is not available
+    const syncSettings = async () => {
+      try {
+        await supabase
+          .from('user_settings')
+          .upsert({ user_id: user.id, currency_code: currencyCode }, { onConflict: 'user_id' });
+      } catch (err) {
+        console.warn('[SettingsProvider] Failed to sync to Supabase:', err);
+      }
+    };
+    syncSettings();
   }, [currencyCode, loading, user]);
 
   const value = useMemo(() => ({ currencyCode, setCurrencyCode, loading }), [currencyCode, loading]);

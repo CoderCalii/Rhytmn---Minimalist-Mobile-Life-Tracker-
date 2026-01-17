@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export interface HabitRow {
   id: string;
@@ -54,40 +54,58 @@ function useHabitsInternal(userId: string | null): HabitsContextValue {
       return;
     }
 
+    // Skip Supabase calls if not configured
+    if (!isSupabaseConfigured) {
+      setTimeout(() => {
+        setHabits([]);
+        setHabitLogs([]);
+        setLoading(false);
+        setError(null);
+      }, 0);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    const [habitsResult, logsResult] = await Promise.all([
-      supabase
-        .from('habits')
-        .select('id, title, frequency, active, created_at, updated_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('habit_logs')
-        .select('id, habit_id, user_id, completed_on, completed_at, created_at')
-        .eq('user_id', userId)
-        .order('completed_on', { ascending: false })
-    ]);
+    try {
+      const [habitsResult, logsResult] = await Promise.all([
+        supabase
+          .from('habits')
+          .select('id, title, frequency, active, created_at, updated_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('habit_logs')
+          .select('id, habit_id, user_id, completed_on, completed_at, created_at')
+          .eq('user_id', userId)
+          .order('completed_on', { ascending: false })
+      ]);
 
-    if (habitsResult.error) {
+      if (habitsResult.error) {
+        setError('Failed to load habits.');
+        setHabits([]);
+        setHabitLogs([]);
+        setLoading(false);
+        return;
+      }
+
+      if (logsResult.error) {
+        setError('Failed to load habit logs.');
+        setHabits((habitsResult.data ?? []) as HabitRow[]);
+        setHabitLogs([]);
+        setLoading(false);
+        return;
+      }
+
+      setHabits((habitsResult.data ?? []) as HabitRow[]);
+      setHabitLogs((logsResult.data ?? []) as HabitLogRow[]);
+    } catch (err) {
+      console.warn('[habitsProvider] Failed to fetch habits:', err);
       setError('Failed to load habits.');
       setHabits([]);
       setHabitLogs([]);
-      setLoading(false);
-      return;
     }
-
-    if (logsResult.error) {
-      setError('Failed to load habit logs.');
-      setHabits((habitsResult.data ?? []) as HabitRow[]);
-      setHabitLogs([]);
-      setLoading(false);
-      return;
-    }
-
-    setHabits((habitsResult.data ?? []) as HabitRow[]);
-    setHabitLogs((logsResult.data ?? []) as HabitLogRow[]);
     setLoading(false);
   }, [userId]);
 

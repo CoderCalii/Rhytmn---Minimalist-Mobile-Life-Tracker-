@@ -12,7 +12,7 @@ import TodayStatusCard from '../components/TodayStatusCard';
 import { useTasks } from '../../../store/tasksProvider';
 import { useHabits } from '../../../store/habitsProvider';
 import { useAuth } from '../../../hooks/useAuth';
-import { supabase } from '../../../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../../lib/supabase';
 import { getScrollPaddingBottom } from '../../../components/layout/layoutConstants';
 
 interface HomeViewProps {
@@ -75,24 +75,36 @@ const HomeView = ({ onGoTasks, onGoHabits, onGoAlerts, onOpenSettings }: HomeVie
       setNotesError(null);
     }, 0);
 
-    supabase
-      .from('notes')
-      .select('id, title, content, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5)
-      .then(({ data, error: notesFetchError }) => {
-        if (!isMounted) return;
-        if (notesFetchError) {
+    // Check if Supabase is configured before making API calls
+    if (isSupabaseConfigured) {
+      supabase
+        .from('notes')
+        .select('id, title, content, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+        .then(({ data, error: notesFetchError }) => {
+          if (!isMounted) return;
+          if (notesFetchError) {
+            setNotesError('Failed to load notes.');
+            setResurfacingNote(null);
+          } else {
+            const notes = (data ?? []) as NoteRow[];
+            const recentNote = notes.find((note) => note.title || note.content);
+            setResurfacingNote(recentNote ?? null);
+          }
+          setNotesLoading(false);
+        })
+        .catch((err) => {
+          console.warn('[HomeView] Failed to fetch notes:', err);
+          if (!isMounted) return;
           setNotesError('Failed to load notes.');
           setResurfacingNote(null);
-        } else {
-          const notes = (data ?? []) as NoteRow[];
-          const recentNote = notes.find((note) => note.title || note.content);
-          setResurfacingNote(recentNote ?? null);
-        }
-        setNotesLoading(false);
-      });
+          setNotesLoading(false);
+        });
+    } else {
+      setNotesLoading(false);
+    }
 
     return () => {
       isMounted = false;

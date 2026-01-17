@@ -316,20 +316,53 @@ export function useDailyRollover({ userId, tasks, notesReady, tasksReady }: UseD
           const archivedAt = dayEndIso
           const updates = await Promise.all(tasksToArchive.map(async (task) => {
             const nextTags = buildArchivedTags(task)
+            // Build update payload: set archived_at timestamp and update tags
+            const updatePayload: {
+              archived_at: string;
+              updated_at: string;
+              tags?: string | string[] | null;
+            } = {
+              archived_at: archivedAt,
+              updated_at: archivedAt,
+              tags: nextTags
+            };
+            
+            // Log the payload for debugging
+            console.log('[useDailyRollover] Archiving task', {
+              taskId: task.id,
+              payload: updatePayload
+            });
+            
             const { error: updateError } = await supabase
               .from('tasks')
-              .update({ tags: nextTags, updated_at: archivedAt })
+              .update(updatePayload)
               .eq('id', task.id)
               .eq('user_id', userId)
+            
+            if (updateError) {
+              console.error('[useDailyRollover] Supabase update error', {
+                taskId: task.id,
+                error: updateError,
+                payload: updatePayload
+              });
+            }
+            
             return { id: task.id, error: updateError }
           }))
 
           const failed = updates.filter((update) => update.error)
           if (failed.length > 0) {
             const failedIds = failed.map((f) => f.id)
-            console.error('[useDailyRollover] Failed to archive tasks', {
+            const errorDetails = failed.map((f) => ({
+              id: f.id,
+              message: f.error?.message,
+              code: f.error?.code,
+              details: f.error?.details
+            }))
+            console.warn('[useDailyRollover] Failed to archive tasks', {
               failedIds,
-              errors: failed.map((f) => f.error)
+              errors: errorDetails,
+              note: 'Rollover will not be committed due to archive failures'
             })
             throw new Error(`Failed to archive ${failed.length} task(s): ${failedIds.join(', ')}`)
           }
