@@ -11,15 +11,23 @@ import { TasksProvider } from './src/store/tasksProvider';
 import { HabitsProvider } from './src/store/habitsProvider';
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
+  // CRITICAL FIX: Add error handling for font loading to prevent crashes
+  const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
     SpaceGrotesk_700Bold
   });
 
-  if (!fontsLoaded) {
+  // Wait for fonts to load if no error
+  if (!fontsLoaded && !fontError) {
     return null;
+  }
+
+  // If font loading failed, log warning but continue with system fonts
+  if (fontError) {
+    console.warn('[App] Font loading failed, continuing with system fonts:', fontError);
+    // Continue rendering - fonts will fall back to system fonts automatically
   }
 
   return (
