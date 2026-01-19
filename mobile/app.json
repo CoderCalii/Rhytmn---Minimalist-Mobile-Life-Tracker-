@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Rhythm",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/rhytmn logo.png",
+    "icon": "./assets/rh_in_black.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/rhytmn logo.png",
+      "image": "./assets/rh_in_black.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,14 +18,14 @@
     "android": {
       "package": "com.rhytmn.mobile",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/rhytmn logo.png",
+        "foregroundImage": "./assets/rh_in_black.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/rhytmn logo.png"
+      "favicon": "./assets/rh_in_black.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
@@ -33,8 +33,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "fcbc6103-c6e1-45cb-9886-eb4aa2f98b7d"
+        "projectId": "6ed9fef7-65bf-42e4-bffc-eee3308415dd"
       }
-    }
+    },
+    "owner": "codercalibuilder123"
   }
 }

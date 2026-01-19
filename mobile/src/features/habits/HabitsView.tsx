@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Flame } from 'lucide-react-native';
 import { eachDayOfInterval, endOfMonth, format, getDaysInMonth, getDaysInYear, startOfMonth, subDays } from 'date-fns';
@@ -44,12 +44,23 @@ const getCurrentStreak = (dates: Set<string>, startDate: Date) => {
   return streak;
 };
 
-const HabitsView = () => {
+interface HabitsViewProps {
+  refreshToken?: number;
+}
+
+const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
   const [scale, setScale] = useState<TimeScale>('Daily');
-  const { habits: habitsData, habitLogs, loading, error, toggleHabitToday } = useHabits();
+  const { habits: habitsData, habitLogs, loading, error, toggleHabitToday, refreshHabits } = useHabits();
   const [monthGridWidth, setMonthGridWidth] = useState(0);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets) + 32;
+
+  // Refresh habits when refreshToken changes (triggered after creating a new habit)
+  useEffect(() => {
+    if (refreshToken > 0) {
+      refreshHabits();
+    }
+  }, [refreshToken, refreshHabits]);
 
   const today = new Date();
   const todayKey = toDateKey(today);
