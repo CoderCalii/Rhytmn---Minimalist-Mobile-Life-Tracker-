@@ -1,7 +1,7 @@
 import 'react-native-url-polyfill/auto';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -17,38 +17,17 @@ if (!isSupabaseConfigured) {
   );
 }
 
-// CRITICAL FIX: Wrap client creation in try-catch to prevent synchronous throws
-// This prevents crashes if createClient() throws during module initialization
-let supabase: SupabaseClient;
-
-try {
-  supabase = createClient(
-    supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder-key',
-    {
-      auth: {
-        storage: AsyncStorage,
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false
-      }
+// Create client with fallback URLs to prevent immediate crashes
+// The client will still fail on API calls, but won't crash on initialization
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false
     }
-  );
-} catch (error) {
-  console.error('[supabase] Failed to create client, using fallback:', error);
-  // Create minimal client that will fail gracefully on use
-  // This prevents crash but will fail on actual API calls
-  supabase = createClient(
-    'https://placeholder.supabase.co',
-    'placeholder-key',
-    { 
-      auth: { 
-        storage: AsyncStorage,
-        autoRefreshToken: false,
-        persistSession: false
-      } 
-    }
-  ) as SupabaseClient;
-}
-
-export { supabase };
+  }
+);

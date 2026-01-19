@@ -1,5 +1,5 @@
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: { screen?: keyof TabParamList } | undefined;
   PageDetail: { pageId?: string } | undefined;
   ArchivedTasks: undefined;
 };

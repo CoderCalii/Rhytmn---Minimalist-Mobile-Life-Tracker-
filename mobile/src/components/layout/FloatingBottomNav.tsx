@@ -4,7 +4,8 @@ import { Pressable, View } from 'react-native';
 import { Activity, CreditCard, House, SquareCheckBig } from 'lucide-react-native';
 import { NavigationContext, NavigationRouteContext } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { TabParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TabParamList, RootStackParamList } from '../../navigation/types';
 
 type NavItem = {
   key: keyof TabParamList;
@@ -24,11 +25,39 @@ interface FloatingBottomNavProps {
 }
 
 const FloatingBottomNav = ({ bottomOffset }: FloatingBottomNavProps) => {
-  const navigation = useContext(NavigationContext) as BottomTabNavigationProp<TabParamList> | null;
+  const navigation = useContext(NavigationContext);
   const route = useContext(NavigationRouteContext);
   const leftItems = navItems.slice(0, 2);
   const rightItems = navItems.slice(2);
-  const currentRouteName = route?.name as keyof TabParamList | undefined;
+  const currentRouteName = route?.name as string | undefined;
+
+  // Check if we're in a Stack Navigator (ArchivedTasks, PageDetail) or Tab Navigator
+  const isStackNavigator = currentRouteName === 'ArchivedTasks' || currentRouteName === 'PageDetail';
+  const isTabNavigator = ['Home', 'Tasks', 'Habits', 'Finance', 'Settings'].includes(currentRouteName || '');
+
+  const handleNavigate = (tabKey: keyof TabParamList) => {
+    if (!navigation) return;
+
+    if (isStackNavigator) {
+      // If we're in a Stack Navigator, navigate to Tabs with the specific screen
+      const stackNav = navigation as NativeStackNavigationProp<RootStackParamList>;
+      stackNav.navigate('Tabs', { screen: tabKey });
+    } else if (isTabNavigator) {
+      // If we're already in Tab Navigator, navigate directly
+      const tabNav = navigation as BottomTabNavigationProp<TabParamList>;
+      tabNav.navigate(tabKey);
+    } else {
+      // Fallback: try to navigate to Tabs first
+      try {
+        const stackNav = navigation as NativeStackNavigationProp<RootStackParamList>;
+        stackNav.navigate('Tabs', { screen: tabKey });
+      } catch {
+        // If that fails, try direct navigation
+        const tabNav = navigation as BottomTabNavigationProp<TabParamList>;
+        tabNav.navigate?.(tabKey);
+      }
+    }
+  };
 
   return (
     <View
@@ -44,7 +73,7 @@ const FloatingBottomNav = ({ bottomOffset }: FloatingBottomNavProps) => {
               return (
                 <Pressable
                   key={key}
-                  onPress={() => navigation?.navigate?.(key)}
+                  onPress={() => handleNavigate(key)}
                   className="items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel={label}
@@ -62,7 +91,7 @@ const FloatingBottomNav = ({ bottomOffset }: FloatingBottomNavProps) => {
               return (
                 <Pressable
                   key={key}
-                  onPress={() => navigation?.navigate?.(key)}
+                  onPress={() => handleNavigate(key)}
                   className="items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel={label}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LogOut } from 'lucide-react-native';
-import { supabase } from '../../../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface AuthControlProps {
@@ -23,22 +23,60 @@ const AuthControl = ({ onOpenSettings }: AuthControlProps) => {
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
-
-    const { error: authError } = mode === 'sign_in'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-
-    setIsSubmitting(false);
-
-    if (authError) {
-      setError(authError.message);
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured) {
+      setError('Supabase is not configured. Please check your environment variables.');
       return;
     }
 
-    setOpen(false);
-    setPassword('');
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      // Log configuration status for debugging
+      console.log('[AuthControl] Attempting', mode, 'for:', email);
+      console.log('[AuthControl] Supabase configured:', isSupabaseConfigured);
+
+      const { error: authError, data } = mode === 'sign_in'
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password });
+
+      setIsSubmitting(false);
+
+      if (authError) {
+        console.error('[AuthControl] Supabase auth error:', authError);
+        setError(authError.message);
+        return;
+      }
+
+      console.log('[AuthControl] Auth success:', mode, data?.user?.email);
+      setOpen(false);
+      setPassword('');
+    } catch (err) {
+      setIsSubmitting(false);
+      // Handle network errors and other exceptions
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : 'Network request failed. Please check your internet connection and try again.';
+      
+      console.error('[AuthControl] Auth exception:', err);
+      console.error('[AuthControl] Error details:', {
+        message: errorMessage,
+        isSupabaseConfigured,
+        hasUrl: Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL),
+        hasKey: Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
+      });
+      
+      // Check for common network error patterns
+      if (errorMessage.includes('Network request failed') || 
+          errorMessage.includes('Failed to fetch') ||
+          errorMessage.includes('NetworkError') ||
+          errorMessage.includes('network')) {
+        setError('Network request failed. Please check:\n1. Your internet connection\n2. Supabase URL is correct\n3. Environment variables are set');
+      } else {
+        setError(errorMessage);
+      }
+    }
   };
 
   const handleSignOut = async () => {
