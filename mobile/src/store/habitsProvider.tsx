@@ -32,6 +32,7 @@ interface HabitsContextValue {
   toggleHabitToday: (habitId: string) => Promise<void>;
   isHabitCompletedToday: (habitId: string) => boolean;
   getHabitStreak: (habitId: string) => number;
+  deleteHabit: (habitId: string) => Promise<void>;
 }
 
 const HabitsContext = createContext<HabitsContextValue | null>(null);
@@ -216,6 +217,50 @@ function useHabitsInternal(userId: string | null): HabitsContextValue {
     [habitLogs]
   );
 
+  const deleteHabit = useCallback(
+    async (habitId: string) => {
+      if (!userId) return;
+
+      // Optimistic removal
+      const previousHabits = [...habits];
+      const previousLogs = [...habitLogs];
+
+      setHabits((prev) => prev.filter((habit) => habit.id !== habitId));
+      setHabitLogs((prev) => prev.filter((log) => log.habit_id !== habitId));
+      setError(null);
+
+      try {
+        // Delete logs first (in case cascade is not configured)
+        const { error: logsError } = await supabase
+          .from('habit_logs')
+          .delete()
+          .eq('habit_id', habitId)
+          .eq('user_id', userId);
+
+        if (logsError) {
+          throw logsError;
+        }
+
+        const { error: habitError } = await supabase
+          .from('habits')
+          .delete()
+          .eq('id', habitId)
+          .eq('user_id', userId);
+
+        if (habitError) {
+          throw habitError;
+        }
+      } catch (err) {
+        console.warn('[habitsProvider] Failed to delete habit:', err);
+        // Revert optimistic update on failure
+        setHabits(previousHabits);
+        setHabitLogs(previousLogs);
+        setError('Failed to delete habit.');
+      }
+    },
+    [userId, habits, habitLogs]
+  );
+
   return {
     habits: userId ? habits : [],
     habitLogs: userId ? habitLogs : [],
@@ -224,7 +269,8 @@ function useHabitsInternal(userId: string | null): HabitsContextValue {
     refreshHabits,
     toggleHabitToday,
     isHabitCompletedToday,
-    getHabitStreak
+    getHabitStreak,
+    deleteHabit
   };
 }
 

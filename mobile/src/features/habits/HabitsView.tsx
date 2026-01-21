@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Flame } from 'lucide-react-native';
 import { eachDayOfInterval, endOfMonth, format, getDaysInMonth, getDaysInYear, startOfMonth, subDays } from 'date-fns';
 import { BlurView } from 'expo-blur';
@@ -50,7 +50,15 @@ interface HabitsViewProps {
 
 const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
   const [scale, setScale] = useState<TimeScale>('Daily');
-  const { habits: habitsData, habitLogs, loading, error, toggleHabitToday, refreshHabits } = useHabits();
+  const {
+    habits: habitsData,
+    habitLogs,
+    loading,
+    error,
+    toggleHabitToday,
+    refreshHabits,
+    deleteHabit
+  } = useHabits();
   const [monthGridWidth, setMonthGridWidth] = useState(0);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets) + 32;
@@ -108,15 +116,42 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
             </View>
             {habits.map((habit) => {
               const isCompletedToday = habit.completedDates.has(todayKey);
+
+              const handleLongPress = () => {
+                Alert.alert(
+                  'Delete habit',
+                  `Delete "${habit.name}" and its history?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => {
+                        void deleteHabit(habit.id);
+                      }
+                    }
+                  ]
+                );
+              };
+
               return (
-                <View key={habit.id} className="flex-row items-center justify-between p-4 border border-gray-200 rounded-2xl">
-                  <View className="flex-row items-center gap-4">
+                <View
+                  key={habit.id}
+                  className="flex-row items-center justify-between p-4 border border-gray-200 rounded-2xl"
+                >
+                  <Pressable
+                    onLongPress={handleLongPress}
+                    delayLongPress={400}
+                    className="flex-row items-center gap-4 flex-1"
+                  >
                     <View className={`w-3 h-3 rounded-full ${isCompletedToday ? 'bg-emerald-500' : 'bg-gray-200'}`} />
-                    <View>
-                      <Text className="font-bold text-sm">{habit.name}</Text>
+                    <View className="flex-1">
+                      <Text numberOfLines={1} className="font-bold text-sm">
+                        {habit.name}
+                      </Text>
                       <Text className="text-[10px] text-gray-400">{habit.meta}</Text>
                     </View>
-                  </View>
+                  </Pressable>
                   <Pressable
                     onPress={() => toggleHabitToday(habit.id)}
                     className={`w-10 h-10 rounded-xl items-center justify-center ${isCompletedToday ? 'bg-black' : 'bg-gray-100'}`}
