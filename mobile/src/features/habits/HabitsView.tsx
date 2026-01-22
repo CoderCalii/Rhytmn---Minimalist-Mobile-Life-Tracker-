@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Check, Flame } from 'lucide-react-native';
 import { eachDayOfInterval, endOfMonth, format, getDaysInMonth, getDaysInYear, startOfMonth, subDays } from 'date-fns';
@@ -44,11 +44,7 @@ const getCurrentStreak = (dates: Set<string>, startDate: Date) => {
   return streak;
 };
 
-interface HabitsViewProps {
-  refreshToken?: number;
-}
-
-const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
+const HabitsView = () => {
   const [scale, setScale] = useState<TimeScale>('Daily');
   const {
     habits: habitsData,
@@ -56,19 +52,11 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
     loading,
     error,
     toggleHabitToday,
-    refreshHabits,
     deleteHabit
   } = useHabits();
   const [monthGridWidth, setMonthGridWidth] = useState(0);
   const insets = useSafeAreaInsets();
   const scrollPaddingBottom = getScrollPaddingBottom(insets) + 32;
-
-  // Refresh habits when refreshToken changes (triggered after creating a new habit)
-  useEffect(() => {
-    if (refreshToken > 0) {
-      refreshHabits();
-    }
-  }, [refreshToken, refreshHabits]);
 
   const today = new Date();
   const todayKey = toDateKey(today);
@@ -179,21 +167,45 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
               const weeklyCount = weekKeys.reduce((count, dateKey) => (
                 count + (habit.completedDates.has(dateKey) ? 1 : 0)
               ), 0);
+
+              const handleLongPress = () => {
+                Alert.alert(
+                  'Delete habit',
+                  `Delete "${habit.name}" and its history?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => {
+                        void deleteHabit(habit.id);
+                      }
+                    }
+                  ]
+                );
+              };
+
               return (
-                <View key={habit.id}>
-                  <View className="flex-row justify-between items-baseline mb-3">
-                    <Text className="font-bold text-sm uppercase tracking-wider">{habit.name}</Text>
-                    <Text className="text-[10px] text-gray-400 font-bold">{weeklyCount}/7 days</Text>
+                <Pressable
+                  key={habit.id}
+                  onLongPress={handleLongPress}
+                  delayLongPress={400}
+                >
+                  <View>
+                    <View className="flex-row justify-between items-baseline mb-3">
+                      <Text className="font-bold text-sm uppercase tracking-wider">{habit.name}</Text>
+                      <Text className="text-[10px] text-gray-400 font-bold">{weeklyCount}/7 days</Text>
+                    </View>
+                    <View className="flex-row gap-1.5">
+                      {weekKeys.map((dateKey) => (
+                        <View
+                          key={dateKey}
+                          className={`flex-1 h-10 rounded-lg ${habit.completedDates.has(dateKey) ? habit.color : 'bg-[#d1d5db]'}`}
+                        />
+                      ))}
+                    </View>
                   </View>
-                  <View className="flex-row gap-1.5">
-                    {weekKeys.map((dateKey) => (
-                      <View
-                        key={dateKey}
-                        className={`flex-1 h-10 rounded-lg ${habit.completedDates.has(dateKey) ? habit.color : 'bg-[#d1d5db]'}`}
-                      />
-                    ))}
-                  </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -205,40 +217,64 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
           <View className="gap-8">
             {habits.map((habit) => {
               const monthlyCount = countDatesWithPrefix(habit.completedDates, monthPrefix);
-              return (
-                <View key={habit.id}>
-                  <View className="flex-row justify-between items-baseline mb-3">
-                    <Text className="font-bold text-sm uppercase tracking-wider">{habit.name}</Text>
-                    <Text className="text-[10px] text-gray-400 font-bold">{monthlyCount} days active</Text>
-                  </View>
-                  <View
-                    className="flex-row flex-wrap"
-                    onLayout={(event) => {
-                      const nextWidth = Math.floor(event.nativeEvent.layout.width);
-                      if (nextWidth > 0 && nextWidth !== monthGridWidth) {
-                        setMonthGridWidth(nextWidth);
+
+              const handleLongPress = () => {
+                Alert.alert(
+                  'Delete habit',
+                  `Delete "${habit.name}" and its history?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => {
+                        void deleteHabit(habit.id);
                       }
-                    }}
-                  >
-                    {monthDates.map((date, index) => {
-                      const dateKey = toDateKey(date);
-                      const isActive = habit.completedDates.has(dateKey);
-                      const isRowEnd = (index + 1) % 7 === 0;
-                      return (
-                        <View
-                          key={dateKey}
-                          style={{
-                            width: monthCellSize || undefined,
-                            height: monthCellSize || undefined,
-                            marginRight: isRowEnd ? 0 : MONTH_GRID_GAP,
-                            marginBottom: MONTH_GRID_GAP
-                          }}
-                          className={`rounded-sm ${isActive ? habit.color : 'bg-[#d1d5db]'}`}
-                        />
-                      );
-                    })}
+                    }
+                  ]
+                );
+              };
+
+              return (
+                <Pressable
+                  key={habit.id}
+                  onLongPress={handleLongPress}
+                  delayLongPress={400}
+                >
+                  <View>
+                    <View className="flex-row justify-between items-baseline mb-3">
+                      <Text className="font-bold text-sm uppercase tracking-wider">{habit.name}</Text>
+                      <Text className="text-[10px] text-gray-400 font-bold">{monthlyCount} days active</Text>
+                    </View>
+                    <View
+                      className="flex-row flex-wrap"
+                      onLayout={(event) => {
+                        const nextWidth = Math.floor(event.nativeEvent.layout.width);
+                        if (nextWidth > 0 && nextWidth !== monthGridWidth) {
+                          setMonthGridWidth(nextWidth);
+                        }
+                      }}
+                    >
+                      {monthDates.map((date, index) => {
+                        const dateKey = toDateKey(date);
+                        const isActive = habit.completedDates.has(dateKey);
+                        const isRowEnd = (index + 1) % 7 === 0;
+                        return (
+                          <View
+                            key={dateKey}
+                            style={{
+                              width: monthCellSize || undefined,
+                              height: monthCellSize || undefined,
+                              marginRight: isRowEnd ? 0 : MONTH_GRID_GAP,
+                              marginBottom: MONTH_GRID_GAP
+                            }}
+                            className={`rounded-sm ${isActive ? habit.color : 'bg-[#d1d5db]'}`}
+                          />
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -253,37 +289,61 @@ const HabitsView = ({ refreshToken = 0 }: HabitsViewProps) => {
               const monthCounts = Array.from({ length: 12 }, (_, monthIdx) => (
                 countDatesWithPrefix(habit.completedDates, format(new Date(today.getFullYear(), monthIdx, 1), 'yyyy-MM'))
               ));
+
+              const handleLongPress = () => {
+                Alert.alert(
+                  'Delete habit',
+                  `Delete "${habit.name}" and its history?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => {
+                        void deleteHabit(habit.id);
+                      }
+                    }
+                  ]
+                );
+              };
+
               return (
-                <View key={habit.id}>
-                  <Text className="font-bold text-sm uppercase tracking-wider mb-4">{habit.name}</Text>
-                  <View className="flex-row flex-wrap gap-1">
-                    {monthCounts.map((count, monthIdx) => {
-                      const monthDate = new Date(today.getFullYear(), monthIdx, 1);
-                      const daysInMonth = getDaysInMonth(monthDate);
-                      const completionPercent = daysInMonth ? Math.round((count / daysInMonth) * 100) : 0;
-                      return (
-                        <View key={format(monthDate, 'yyyy-MM')} className="items-center gap-1">
-                          <View className="w-6 h-20 bg-[#d1d5db] rounded-full relative overflow-hidden">
-                            <View
-                              className={`absolute bottom-0 left-0 right-0 ${habit.color}`}
-                              style={{ height: `${completionPercent}%` }}
-                            />
+                <Pressable
+                  key={habit.id}
+                  onLongPress={handleLongPress}
+                  delayLongPress={400}
+                >
+                  <View>
+                    <Text className="font-bold text-sm uppercase tracking-wider mb-4">{habit.name}</Text>
+                    <View className="flex-row flex-wrap gap-1">
+                      {monthCounts.map((count, monthIdx) => {
+                        const monthDate = new Date(today.getFullYear(), monthIdx, 1);
+                        const daysInMonth = getDaysInMonth(monthDate);
+                        const completionPercent = daysInMonth ? Math.round((count / daysInMonth) * 100) : 0;
+                        return (
+                          <View key={format(monthDate, 'yyyy-MM')} className="items-center gap-1">
+                            <View className="w-6 h-20 bg-[#d1d5db] rounded-full relative overflow-hidden">
+                              <View
+                                className={`absolute bottom-0 left-0 right-0 ${habit.color}`}
+                                style={{ height: `${completionPercent}%` }}
+                              />
+                            </View>
+                            <Text className="text-[8px] text-gray-400 font-bold text-center">{format(monthDate, 'MMM')}</Text>
                           </View>
-                          <Text className="text-[8px] text-gray-400 font-bold text-center">{format(monthDate, 'MMM')}</Text>
-                        </View>
-                      );
-                    })}
+                        );
+                      })}
+                    </View>
+                    <View className="mt-4 p-4 bg-gray-50 rounded-2xl flex-row justify-between items-center">
+                      <Text className="text-[10px] font-bold text-gray-400 uppercase">Annual Completion</Text>
+                      <Text
+                        className="text-lg font-bold"
+                        style={{ fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) }}
+                      >
+                        {yearlyCount}/{daysInYear}
+                      </Text>
+                    </View>
                   </View>
-                  <View className="mt-4 p-4 bg-gray-50 rounded-2xl flex-row justify-between items-center">
-                    <Text className="text-[10px] font-bold text-gray-400 uppercase">Annual Completion</Text>
-                    <Text
-                      className="text-lg font-bold"
-                      style={{ fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) }}
-                    >
-                      {yearlyCount}/{daysInYear}
-                    </Text>
-                  </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>

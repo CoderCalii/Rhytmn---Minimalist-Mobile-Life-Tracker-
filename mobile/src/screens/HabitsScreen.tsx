@@ -7,7 +7,6 @@ import FloatingLayout from '../components/layout/FloatingLayout';
 
 const HabitsScreen = () => {
   const [showCapture, setShowCapture] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
 
   return (
     <FloatingLayout
@@ -16,12 +15,11 @@ const HabitsScreen = () => {
       fabIcon={<Plus size={24} color="#ffffff" />}
     >
       <View className="flex-1">
-        <HabitsView refreshToken={refreshToken} />
+        <HabitsView />
         {showCapture && (
           <HabitCaptureModal
             onClose={() => setShowCapture(false)}
             onSaved={() => {
-              setRefreshToken((token) => token + 1);
               setShowCapture(false);
             }}
           />

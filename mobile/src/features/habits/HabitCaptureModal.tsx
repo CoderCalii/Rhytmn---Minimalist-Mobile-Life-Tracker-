@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { ArrowRight, Clock, X } from 'lucide-react-native';
 import { sanitizeText } from '../../utils/sanitize';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../hooks/useAuth';
+import { useHabits } from '../../store/habitsProvider';
 
 interface HabitCaptureModalProps {
   onClose: () => void;
@@ -11,39 +10,39 @@ interface HabitCaptureModalProps {
 }
 
 const HabitCaptureModal = ({ onClose, onSaved }: HabitCaptureModalProps) => {
-  const { user } = useAuth();
+  const { createHabit, error: providerError } = useHabits();
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('Daily');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isDisabled = !name || isSaving || !user;
+  const isDisabled = !name || isSaving;
 
   const handleSave = async () => {
-    if (!user) {
-      setError('Sign in to create a habit.');
+    const safeName = sanitizeText(name).trim();
+    if (!safeName) {
+      setError('Habit name is required.');
       return;
     }
-    const safeName = sanitizeText(name).trim();
-    if (!safeName) return;
     const safeGoal = sanitizeText(goal).trim();
 
     setIsSaving(true);
     setError(null);
 
-    const { error: insertError } = await supabase
-      .from('habits')
-      .insert({ user_id: user.id, title: safeName, frequency: safeGoal });
-
-    if (insertError) {
+    try {
+      await createHabit({
+        title: safeName,
+        frequency: safeGoal
+      });
+      // Only call onSaved after successful creation
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      // Error is handled by provider, but we show it here too
+      setError(providerError || 'Failed to create habit.');
+    } finally {
       setIsSaving(false);
-      setError('Failed to save habit.');
-      return;
     }
-
-    setIsSaving(false);
-    onSaved?.();
-    onClose();
   };
 
   return (
@@ -117,7 +116,11 @@ const HabitCaptureModal = ({ onClose, onSaved }: HabitCaptureModalProps) => {
               <ArrowRight size={20} color="#ffffff" />
             </View>
           </Pressable>
-          {error && <Text className="mt-3 text-xs font-semibold text-rose-500 text-center">{error}</Text>}
+          {(error || providerError) && (
+            <Text className="mt-3 text-xs font-semibold text-rose-500 text-center">
+              {error || providerError}
+            </Text>
+          )}
         </View>
       </View>
     </Modal>

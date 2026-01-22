@@ -23,12 +23,18 @@ export interface HabitLogRow {
   created_at?: string | null;
 }
 
+export interface CreateHabitInput {
+  title: string;
+  frequency?: string;
+}
+
 interface HabitsContextValue {
   habits: HabitRow[];
   habitLogs: HabitLogRow[];
   loading: boolean;
   error: string | null;
   refreshHabits: () => Promise<void>;
+  createHabit: (input: CreateHabitInput) => Promise<void>;
   toggleHabitToday: (habitId: string) => Promise<void>;
   isHabitCompletedToday: (habitId: string) => boolean;
   getHabitStreak: (habitId: string) => number;
@@ -121,6 +127,67 @@ function useHabitsInternal(userId: string | null): HabitsContextValue {
   const refreshHabits = useCallback(async () => {
     await fetchHabits();
   }, [fetchHabits]);
+
+  const createHabit = useCallback(
+    async (input: CreateHabitInput) => {
+      if (!userId) {
+        setError('Sign in to create a habit.');
+        return;
+      }
+
+      // Skip Supabase calls if not configured
+      if (!isSupabaseConfigured) {
+        setError('Database not configured.');
+        return;
+      }
+
+      const safeTitle = input.title.trim();
+      if (!safeTitle) {
+        setError('Habit name is required.');
+        return;
+      }
+
+      const safeFrequency = input.frequency?.trim() || 'Daily';
+
+      // Optimistic update: add temporary habit to local state
+      const tempHabit: HabitRow = {
+        id: `temp-${Date.now()}`,
+        title: safeTitle,
+        frequency: safeFrequency,
+        active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const previousHabits = [...habits];
+      setHabits((prev) => [tempHabit, ...prev]);
+      setError(null);
+
+      try {
+        const { data, error: insertError } = await supabase
+          .from('habits')
+          .insert({ user_id: userId, title: safeTitle, frequency: safeFrequency })
+          .select('id, title, frequency, active, created_at, updated_at')
+          .single();
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        // Replace temp habit with real one from Supabase
+        setHabits((prev) =>
+          prev.map((habit) => (habit.id === tempHabit.id ? (data as HabitRow) : habit))
+        );
+      } catch (err) {
+        console.warn('[habitsProvider] Failed to create habit:', err);
+        // Revert optimistic update on failure
+        setHabits(previousHabits);
+        setError('Failed to create habit.');
+        throw err;
+      }
+    },
+    [userId, habits]
+  );
 
   const isHabitCompletedToday = useCallback(
     (habitId: string): boolean => {
@@ -267,6 +334,7 @@ function useHabitsInternal(userId: string | null): HabitsContextValue {
     loading: userId ? loading : false,
     error: userId ? error : null,
     refreshHabits,
+    createHabit,
     toggleHabitToday,
     isHabitCompletedToday,
     getHabitStreak,
